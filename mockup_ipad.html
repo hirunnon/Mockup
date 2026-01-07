@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AMR Control System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Sarabun for Thai) -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f3f4f6;
+            /* Gray-100 */
+            touch-action: manipulation;
+            /* Improve touch response */
+        }
+
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+
+        .btn-press:active {
+            transform: scale(0.95);
+            transition: transform 0.1s;
+        }
+    </style>
+</head>
+
+<body class="h-screen w-full flex flex-col overflow-hidden text-gray-800">
+
+    <!-- Header / Status Bar -->
+    <header class="bg-white shadow-sm h-16 flex justify-between items-center px-6 z-20 shrink-0">
+        <div class="flex items-center space-x-2">
+            <img src="https://github.com/hirunnon/Mockup/blob/main/logo_adient.png?raw=true" alt="Logo" class="rounded-lg w-10 h-10">
+            <h1 class="text-xl font-bold text-blue-800" id="header-title">AMR Control</h1>
+        </div>
+        <div class="flex items-center space-x-6">
+            <!-- Time Removed -->
+
+            <!-- Status Icons -->
+            <div class="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
+                <i id="wifi-icon" class="fa-solid fa-wifi text-green-500 text-lg"></i>
+                <span class="text-xs font-bold text-gray-500">Ready</span>
+            </div>
+            <div class="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full">
+                <i id="battery-icon" class="fa-solid fa-battery-three-quarters text-green-500 text-lg"></i>
+                <span id="battery-text" class="text-xs font-bold text-gray-500">75%</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 relative overflow-hidden bg-gray-50">
+
+        <!-- Page: Main Menu -->
+        <div id="page-main"
+            class="page absolute inset-0 p-6 flex flex-col items-center justify-center transition-opacity duration-300">
+            <div class="grid grid-cols-3 gap-6 w-full max-w-5xl h-full max-h-[600px]">
+                <button onclick="navigateTo('page-point-menu')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-blue-500 hover:bg-blue-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-4xl">
+                        <i class="fa-solid fa-location-dot"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">Point 1,4,7,10</span>
+                </button>
+
+                <button onclick="navigateTo('page-fg-truck')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-orange-500 hover:bg-orange-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 text-4xl">
+                        <i class="fa-solid fa-truck-ramp-box"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">ยก FG มาส่ง Truck</span>
+                </button>
+
+                <button onclick="navigateTo('page-empty-pallet')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-green-500 hover:bg-green-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-4xl">
+                        <i class="fa-solid fa-pallet"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">จัดการ Empty Pallet</span>
+                </button>
+
+                <button onclick="navigateTo('page-wh')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-purple-500 hover:bg-purple-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 text-4xl">
+                        <i class="fa-solid fa-warehouse"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">จัดการ WH</span>
+                </button>
+
+                <button onclick="navigateTo('page-queue')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-red-500 hover:bg-red-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-4xl">
+                        <i class="fa-solid fa-list-check"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">จัดการคิวงาน</span>
+                </button>
+
+                <button onclick="navigateTo('page-amr')"
+                    class="btn-press bg-white rounded-2xl shadow-md flex flex-col items-center justify-center gap-4 border-b-4 border-gray-500 hover:bg-gray-50 transition-colors">
+                    <div
+                        class="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center text-gray-700 text-4xl">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <span class="text-2xl font-bold text-gray-700">ควบคุม AMR</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Page: Point Menu -->
+        <div id="page-point-menu" class="page hidden absolute inset-0 p-6 flex-col items-center">
+            <div class="w-full max-w-5xl flex justify-start mb-6">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+            </div>
+            <div class="grid grid-cols-2 gap-8 w-full max-w-4xl mt-10">
+                <button onclick="navigateTo('point-1')"
+                    class="btn-press h-40 bg-white rounded-2xl shadow-lg border-l-8 border-blue-500 flex items-center justify-center text-4xl font-bold text-gray-700 hover:bg-blue-50">Point
+                    #1</button>
+                <button onclick="navigateTo('point-4')"
+                    class="btn-press h-40 bg-white rounded-2xl shadow-lg border-l-8 border-blue-500 flex items-center justify-center text-4xl font-bold text-gray-700 hover:bg-blue-50">Point
+                    #4</button>
+                <button onclick="navigateTo('point-7')"
+                    class="btn-press h-40 bg-white rounded-2xl shadow-lg border-l-8 border-blue-500 flex items-center justify-center text-4xl font-bold text-gray-700 hover:bg-blue-50">Point
+                    #7</button>
+                <button onclick="navigateTo('point-10')"
+                    class="btn-press h-40 bg-white rounded-2xl shadow-lg border-l-8 border-blue-500 flex items-center justify-center text-4xl font-bold text-gray-700 hover:bg-blue-50">Point
+                    #10</button>
+            </div>
+        </div>
+
+        <!-- Page: Point Detail (Dynamic for #1, #4, #7, #10) -->
+        <div id="page-point-detail" class="page hidden absolute inset-0 p-6 flex-col items-center bg-gray-50">
+            <div class="w-full max-w-5xl flex justify-start mb-4">
+                <button onclick="navigateTo('page-point-menu')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+            </div>
+
+            <div class="w-full max-w-2xl bg-white rounded-3xl shadow-xl p-8 flex flex-col gap-6">
+                <h2 id="point-detail-title" class="text-3xl font-bold text-center text-blue-800 mb-4">Point #X</h2>
+
+                <!-- Scan QR -->
+                <div class="flex justify-center mb-4">
+                    <button onclick="simulateScanQR('point')"
+                        class="btn-press bg-blue-100 p-6 rounded-full shadow-inner hover:bg-blue-200 transition-colors relative group">
+                        <i class="fa-solid fa-qrcode text-5xl text-blue-600"></i>
+                        <span
+                            class="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-sm font-semibold text-blue-600 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Scan
+                            QR</span>
+                    </button>
+                </div>
+
+                <!-- Input Station -->
+                <div class="flex flex-col gap-2">
+                    <label class="text-lg font-semibold text-gray-600">Station No.</label>
+                    <input type="number" id="input-point-station"
+                        class="w-full bg-gray-100 border-2 border-gray-300 rounded-xl px-4 py-4 text-2xl font-bold text-center focus:outline-none focus:border-blue-500 transition-colors"
+                        placeholder="ระบุเลข Station">
+                    <p id="station-hint" class="text-sm text-red-500 font-medium text-center h-5"></p>
+                </div>
+
+                <!-- Input Item -->
+                <div class="flex flex-col gap-2">
+                    <label class="text-lg font-semibold text-gray-600">Item Part No.</label>
+                    <input type="text" id="input-point-item"
+                        class="w-full bg-gray-100 border-2 border-gray-300 rounded-xl px-4 py-4 text-2xl font-bold text-center focus:outline-none focus:border-blue-500 transition-colors"
+                        placeholder="Scan หรือ ระบุ Part">
+                </div>
+
+                <button onclick="confirmPointJob()"
+                    class="btn-press mt-4 bg-green-500 text-white rounded-xl py-4 text-2xl font-bold shadow-lg hover:bg-green-600 transition-colors">
+                    ยืนยัน
+                </button>
+            </div>
+
+            <!-- Mini Queue Preview -->
+            <div class="w-full max-w-2xl mt-8">
+                <h3 class="text-lg font-bold text-gray-500 mb-2">Last 3 Jobs in Queue</h3>
+                <div id="point-mini-queue" class="space-y-2">
+                    <!-- JS will populate -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: FG to Truck -->
+        <div id="page-fg-truck" class="page hidden absolute inset-0 p-6 flex-col items-center bg-gray-50">
+            <div class="w-full max-w-5xl flex justify-start mb-4">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+            </div>
+
+            <div class="w-full max-w-2xl bg-white rounded-3xl shadow-xl p-8 flex flex-col gap-6">
+                <h2 class="text-3xl font-bold text-center text-orange-600 mb-4">FG to Truck</h2>
+
+                <div class="flex justify-center mb-4">
+                    <button onclick="simulateScanQR('fg')"
+                        class="btn-press bg-orange-100 p-6 rounded-full shadow-inner hover:bg-orange-200 transition-colors">
+                        <i class="fa-solid fa-qrcode text-5xl text-orange-600"></i>
+                    </button>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-lg font-semibold text-gray-600">Item Part No.</label>
+                    <input type="text" id="input-fg-item"
+                        class="w-full bg-gray-100 border-2 border-gray-300 rounded-xl px-4 py-4 text-2xl font-bold text-center focus:outline-none focus:border-orange-500"
+                        placeholder="Scan หรือ ระบุ Part">
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="text-lg font-semibold text-gray-600">Amount (Qty)</label>
+                    <input type="number" id="input-fg-amount"
+                        class="w-full bg-gray-100 border-2 border-gray-300 rounded-xl px-4 py-4 text-2xl font-bold text-center focus:outline-none focus:border-orange-500"
+                        placeholder="จำนวน">
+                </div>
+
+                <button onclick="confirmFGJob()"
+                    class="btn-press mt-4 bg-green-500 text-white rounded-xl py-4 text-2xl font-bold shadow-lg hover:bg-green-600 transition-colors">
+                    ยืนยัน
+                </button>
+            </div>
+
+            <div class="w-full max-w-2xl mt-8">
+                <h3 class="text-lg font-bold text-gray-500 mb-2">Latest FG Jobs</h3>
+                <div id="fg-mini-queue" class="space-y-2">
+                    <!-- JS populate -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Empty Pallet -->
+        <div id="page-empty-pallet" class="page hidden absolute inset-0 p-6 flex-col items-center">
+            <div class="w-[95%] max-w-none flex justify-between items-center mb-4">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+                <div class="text-xl font-bold text-green-700">Empty Pallet Management</div>
+                <div id="pallet-status-summary"
+                    class="text-sm font-medium text-gray-600 bg-white px-3 py-1 rounded-lg border border-gray-200">
+                    Loading...
+                </div>
+            </div>
+
+            <div class="flex-1 w-[95%] max-w-none flex items-center justify-between">
+                <button onclick="prevPage('pallet')"
+                    class="btn-press w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-100">
+                    <i class="fa-solid fa-chevron-left text-2xl"></i>
+                </button>
+
+                <div id="pallet-grid"
+                    class="flex-1 grid grid-cols-4 gap-6 px-6 h-[500px] overflow-y-auto content-start">
+                    <!-- JS Generated Buttons -->
+                </div>
+
+                <button onclick="nextPage('pallet')"
+                    class="btn-press w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-100">
+                    <i class="fa-solid fa-chevron-right text-2xl"></i>
+                </button>
+            </div>
+            <div class="mt-2 text-center text-gray-500 font-medium" id="pallet-pagination-info">Page 1 / 2</div>
+        </div>
+
+        <!-- Page: WH Management -->
+        <div id="page-wh" class="page hidden absolute inset-0 p-6 flex-col items-center">
+            <div class="w-[95%] max-w-none flex justify-between items-center mb-4">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+                <div class="text-xl font-bold text-purple-700">Warehouse Management</div>
+                <div id="wh-status-summary"
+                    class="text-sm font-medium text-gray-600 bg-white px-3 py-1 rounded-lg border border-gray-200">
+                    Loading...
+                </div>
+            </div>
+
+            <div class="flex-1 w-[95%] max-w-none flex items-center justify-between">
+                <button onclick="prevPage('wh')"
+                    class="btn-press w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-100">
+                    <i class="fa-solid fa-chevron-left text-2xl"></i>
+                </button>
+
+                <div id="wh-grid" class="flex-1 grid grid-cols-4 gap-6 px-6 h-[500px] overflow-y-auto content-start">
+                    <!-- JS Generated Buttons -->
+                </div>
+
+                <button onclick="nextPage('wh')"
+                    class="btn-press w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-100">
+                    <i class="fa-solid fa-chevron-right text-2xl"></i>
+                </button>
+            </div>
+            <div class="mt-2 text-center text-gray-500 font-medium" id="wh-pagination-info">Page 1 / 2</div>
+        </div>
+
+        <!-- Page: Queue -->
+        <div id="page-queue" class="page hidden absolute inset-0 p-6 flex-col items-center">
+            <div class="w-full max-w-5xl flex justify-between items-center mb-4">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+                <div class="text-2xl font-bold text-red-600">Job Queue</div>
+                <div class="w-24"></div>
+            </div>
+
+            <div
+                class="w-full max-w-5xl bg-white rounded-2xl shadow-lg border border-gray-200 flex-1 overflow-hidden flex flex-col">
+                <div
+                    class="bg-red-50 p-4 grid grid-cols-12 gap-4 text-red-800 font-bold border-b border-red-100 text-lg">
+                    <div class="col-span-1 text-center">#</div>
+                    <div class="col-span-2">Type</div>
+                    <div class="col-span-3">Source</div>
+                    <div class="col-span-4">Detail</div>
+                    <div class="col-span-2 text-center">Status</div>
+                </div>
+                <div id="queue-list" class="flex-1 overflow-y-auto p-2 space-y-2">
+                    <!-- Queue Items Generated by JS -->
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4 mt-4">
+                <button onclick="prevPage('queue')"
+                    class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500"><i
+                        class="fa-solid fa-chevron-left"></i></button>
+                <span id="queue-pagination-info" class="font-medium text-gray-600">Page 1 / 1</span>
+                <button onclick="nextPage('queue')"
+                    class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500"><i
+                        class="fa-solid fa-chevron-right"></i></button>
+            </div>
+        </div>
+
+        <!-- Page: AMR Control -->
+        <div id="page-amr" class="page hidden absolute inset-0 p-6 flex-col items-center">
+            <div class="w-full max-w-5xl flex justify-start mb-6">
+                <button onclick="navigateTo('page-main')"
+                    class="btn-press bg-white text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2 border border-gray-300 shadow">
+                    <i class="fa-solid fa-arrow-left"></i> Back
+                </button>
+            </div>
+
+            <h2 class="text-3xl font-bold text-gray-700 mb-6">AMR Control Panel</h2>
+
+            <!-- AMR Header -->
+            <div
+                class="w-full max-w-4xl bg-white rounded-2xl shadow-md p-6 mb-8 flex justify-between items-center px-12">
+                <div class="flex flex-col items-center gap-2">
+                    <span class="text-gray-500 font-bold text-lg">Ready</span>
+                    <div
+                        class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-2xl shadow-sm">
+                        <i class="fa-solid fa-check"></i>
+                    </div>
+                </div>
+                <div class="w-px h-12 bg-gray-200"></div>
+                <div class="flex flex-col items-center gap-2">
+                    <span class="text-gray-500 font-bold text-lg">Loc.</span>
+                    <div
+                        class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-2xl shadow-sm">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                    </div>
+                </div>
+                <div class="w-px h-12 bg-gray-200"></div>
+                <div class="flex flex-col items-center gap-2">
+                    <span class="text-gray-500 font-bold text-lg">Conf.</span>
+                    <span class="text-3xl font-bold text-blue-600">80%</span>
+                </div>
+                <div class="w-px h-12 bg-gray-200"></div>
+                <div class="flex flex-col items-center gap-2">
+                    <span class="text-gray-500 font-bold text-lg">Battery</span>
+                    <span class="text-3xl font-bold text-green-600" id="amr-battery-text">99%</span>
+                </div>
+            </div>
+
+            <!-- AMR Button Grid -->
+            <div class="w-full max-w-4xl grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <!-- Row 1 -->
+                <button onclick="controlAMR('ทำงานต่อ')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-green-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-green-50 transition-colors">
+                    <i class="fa-solid fa-play text-3xl text-green-600"></i>
+                    <span class="text-lg font-bold text-gray-700">ทำงานต่อ</span>
+                </button>
+                <button onclick="controlAMR('หยุดชั่วคราว')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-yellow-400 h-32 flex flex-col items-center justify-center gap-2 hover:bg-yellow-50 transition-colors">
+                    <i class="fa-solid fa-pause text-3xl text-yellow-500"></i>
+                    <span class="text-lg font-bold text-gray-700">หยุดชั่วคราว</span>
+                </button>
+                <button onclick="controlAMR('วิ่งไป Charge')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-blue-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-blue-50 transition-colors">
+                    <i class="fa-solid fa-charging-station text-3xl text-blue-600"></i>
+                    <span class="text-lg font-bold text-gray-700">ชาร์จแบต</span>
+                </button>
+                <button onclick="controlAMR('วิ่งไป Home')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-purple-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-purple-50 transition-colors">
+                    <i class="fa-solid fa-house text-3xl text-purple-600"></i>
+                    <span class="text-lg font-bold text-gray-700">กลับ Home</span>
+                </button>
+
+                <!-- Row 2 -->
+                <button onclick="controlAMR('ยกเลิกงานที่ทำอยู่')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-red-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-red-50 transition-colors">
+                    <i class="fa-solid fa-ban text-3xl text-red-600"></i>
+                    <span class="text-lg font-bold text-gray-700">ยกเลิกงาน</span>
+                </button>
+                <button onclick="controlAMR('เคลียร์ Error')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-gray-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
+                    <i class="fa-solid fa-screwdriver-wrench text-3xl text-gray-600"></i>
+                    <span class="text-lg font-bold text-gray-700">แก้ Error</span>
+                </button>
+                <button onclick="controlAMR('ย้ายไปจุด Home')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-indigo-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-indigo-50 transition-colors">
+                    <i class="fa-solid fa-arrow-right-to-bracket text-3xl text-indigo-600"></i>
+                    <span class="text-lg font-bold text-gray-700">ย้ายไป Home</span>
+                </button>
+                <button onclick="controlAMR('ยืนยันจุด Home')"
+                    class="btn-press bg-white rounded-2xl shadow-md border-b-4 border-teal-500 h-32 flex flex-col items-center justify-center gap-2 hover:bg-teal-50 transition-colors">
+                    <i class="fa-solid fa-check-double text-3xl text-teal-600"></i>
+                    <span class="text-lg font-bold text-gray-700">ยืนยัน Home</span>
+                </button>
+            </div>
+
+
+        </div>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-overlay"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+
+        <!-- Confirm Modal (Generic) -->
+        <div id="modal-confirm"
+            class="hidden bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full transform scale-100 transition-transform">
+            <h3 id="modal-confirm-title" class="text-2xl font-bold text-gray-800 mb-4">Confirm?</h3>
+            <p id="modal-confirm-msg" class="text-gray-600 mb-8 text-lg">Are you sure?</p>
+            <div class="flex justify-end space-x-4">
+                <button onclick="closeModal()"
+                    class="px-6 py-3 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-lg">Cancel</button>
+                <button id="modal-confirm-btn"
+                    class="px-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 text-lg shadow-md">Confirm</button>
+            </div>
+        </div>
+
+        <!-- Input Modal (WH) -->
+        <div id="modal-input" class="hidden bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Input Data</h3>
+            <p id="modal-input-msg" class="text-gray-600 mb-4 text-lg">Please enter Item Part:</p>
+            <input type="text" id="modal-input-field"
+                class="w-full border-2 border-gray-300 rounded-xl p-3 text-xl mb-6 focus:border-blue-500 outline-none">
+            <div class="flex justify-end space-x-4">
+                <button onclick="closeModal()"
+                    class="px-6 py-3 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-lg">Cancel</button>
+                <button id="modal-input-btn"
+                    class="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700 text-lg shadow-md">Submit</button>
+            </div>
+        </div>
+
+        <!-- Queue Detail Modal -->
+        <div id="modal-queue-detail" class="hidden bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">Job Detail</h3>
+            <div class="bg-gray-50 p-4 rounded-xl mb-6 space-y-2">
+                <p class="text-lg"><span class="font-bold text-gray-500 w-24 inline-block">ID:</span> <span
+                        id="q-detail-id"></span></p>
+                <p class="text-lg"><span class="font-bold text-gray-500 w-24 inline-block">Type:</span> <span
+                        id="q-detail-type"></span></p>
+                <p class="text-lg"><span class="font-bold text-gray-500 w-24 inline-block">Source:</span> <span
+                        id="q-detail-source"></span></p>
+                <p class="text-lg"><span class="font-bold text-gray-500 w-24 inline-block">Item:</span> <span
+                        id="q-detail-item"></span></p>
+                <p class="text-lg"><span class="font-bold text-gray-500 w-24 inline-block">Amount:</span> <span
+                        id="q-detail-amount"></span></p>
+            </div>
+
+            <div class="flex justify-between space-x-4">
+                <button id="q-detail-cancel-btn"
+                    class="flex-1 px-4 py-3 rounded-xl bg-red-100 text-red-600 font-bold hover:bg-red-200 text-lg">ยกเลิกงานนี้</button>
+                <button onclick="closeModal()"
+                    class="flex-1 px-4 py-3 rounded-xl bg-gray-200 text-gray-700 font-bold hover:bg-gray-300 text-lg">ปิด</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast"
+        class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-8 py-4 rounded-full shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none z-50 text-xl font-bold flex items-center gap-3">
+        <i class="fa-solid fa-circle-info"></i>
+        <span id="toast-msg">Notification</span>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            palletCount: 8, // Total Empty Pallet slots
+            palletPerPage: 12,
+
+            whCount: 179,     // Total WH slots
+            whPerPage: 12, // User requested 12 - Grid 4 cols
+
+            queuePerPage: 8
+        };
+
+        // --- State Management ---
+        let appState = {
+            currentPoint: null, // 1, 4, 7, 10
+            queue: [
+                { id: 'J-1001', type: 'Point', source: 'Point #4', item: 'Part-A12', amount: '-', status: 'Pending', timestamp: Date.now() },
+                { id: 'J-1002', type: 'FG', source: 'FG Area', item: 'FG-999', amount: '500', status: 'In Process', timestamp: Date.now() - 10000 },
+                { id: 'J-1003', type: 'Point', source: 'Point #1', item: 'Part-C33', amount: '-', status: Date.now() - 20000 },
+            ],
+            pallets: Array.from({ length: CONFIG.palletCount }, (_, i) => ({ id: i + 1, status: Math.random() > 0.5 ? 'empty' : 'full' })),
+            wh: Array.from({ length: CONFIG.whCount }, (_, i) => ({ id: i + 1, value: Math.random() > 0.7 ? '2450616-T' : null })),
+            pagination: {
+                pallet: 1,
+                wh: 1,
+                queue: 1
+            },
+            amr: {
+                wifi: true,
+                battery: 85,
+                status: 'Idle'
+            }
+        };
+
+        // --- Navigation ---
+        function renderPage(pageId) {
+            // Handle Point Hash (point-X)
+            if (pageId.startsWith('point-')) {
+                const pNum = parseInt(pageId.split('-')[1]);
+                if (!isNaN(pNum)) {
+                    openPointDetail(pNum);
+                    // Don't return, let it fall through to show page-point-detail
+                    // But wait, openPointDetail calls navigateTo('page-point-detail') in original code?
+                    // No, see below. We need to prevent loop or double render.
+                    // Actually, openPointDetail in original code set state then routed.
+                    // New flow: Hash -> renderPage -> openPointDetail(logic only) -> Show Div
+                }
+                pageId = 'page-point-detail';
+            }
+
+            // Redirect if trying to access detail page without state (and not handled by point-X)
+            if (pageId === 'page-point-detail' && !appState.currentPoint) {
+                navigateTo('page-point-menu');
+                return;
+            }
+
+            document.querySelectorAll('.page').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('flex'); // remove flex display
+            });
+            const target = document.getElementById(pageId);
+            if (!target) return;
+
+            target.classList.remove('hidden');
+            target.classList.add('flex'); // Add flex back for centering
+
+            // Specific page init
+            if (pageId === 'page-main') {
+                updateHeader('AMR Control');
+            } else if (pageId === 'page-empty-pallet') {
+                renderPallets();
+            } else if (pageId === 'page-wh') {
+                renderWH();
+            } else if (pageId === 'page-queue') {
+                renderQueue();
+            }
+        }
+
+        function navigateTo(pageId) {
+            window.location.hash = pageId;
+        }
+
+        window.addEventListener('hashchange', () => {
+            const pageId = window.location.hash.substring(1);
+            if (pageId) renderPage(pageId);
+        });
+
+        function updateHeader(title) {
+            document.getElementById('header-title').innerText = title;
+        }
+
+        // --- Clock ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        }, 1000);
+
+        // --- Point Logic ---
+        function openPointDetail(pointNum) {
+            appState.currentPoint = pointNum;
+            document.getElementById('point-detail-title').innerText = `Point #${pointNum}`;
+
+            // Reset Inputs
+            const inputStation = document.getElementById('input-point-station');
+            inputStation.value = '';
+            document.getElementById('input-point-item').value = '';
+            document.getElementById('station-hint').innerText = '';
+
+            // Hint logic
+            let hint = "";
+            if (pointNum === 1) hint = "ใส่ได้เฉพาะเลข 2";
+            if (pointNum === 4) hint = "ใส่ได้เฉพาะเลข 3, 5, 6";
+            if (pointNum === 7) hint = "ใส่ได้เฉพาะเลข 8";
+            if (pointNum === 10) hint = "ใส่ได้เฉพาะเลข 9";
+            inputStation.placeholder = `Station (${hint})`;
+
+            updateMiniQueue();
+            // Removed navigateTo('page-point-detail') as this is now called during render
+        }
+
+        function validateStation(val) {
+            const p = appState.currentPoint;
+            const v = parseInt(val);
+            if (isNaN(v)) return false;
+
+            if (p === 1 && v === 2) return true;
+            if (p === 4 && [3, 5, 6].includes(v)) return true;
+            if (p === 7 && v === 8) return true;
+            if (p === 10 && v === 9) return true;
+            return false;
+        }
+
+        function confirmPointJob() {
+            const stInput = document.getElementById('input-point-station');
+            const itInput = document.getElementById('input-point-item');
+            const hintEl = document.getElementById('station-hint');
+
+            if (!validateStation(stInput.value)) {
+                hintEl.innerText = `Error: Point #${appState.currentPoint} ไม่รองรับ Station ${stInput.value}`;
+                showToast("Station ไม่ถูกต้อง!", "error");
+                return;
+            }
+            if (!itInput.value) {
+                showToast("กรุณาระบุ Item Part", "error");
+                return;
+            }
+
+            // Add Job
+            addJob('Point', `Point #${appState.currentPoint} (St.${stInput.value})`, itInput.value, '-');
+
+            hintEl.innerText = '';
+            stInput.value = '';
+            itInput.value = '';
+            showToast("เพิ่มงานสำเร็จ!");
+            updateMiniQueue();
+        }
+
+        // --- FG Logic ---
+        function confirmFGJob() {
+            const item = document.getElementById('input-fg-item').value;
+            const amt = document.getElementById('input-fg-amount').value;
+
+            if (!item || !amt) {
+                showToast("กรุณากรอกข้อมูลให้ครบ", "error");
+                return;
+            }
+
+            addJob('FG', 'FG to Truck', item, amt);
+
+            document.getElementById('input-fg-item').value = '';
+            document.getElementById('input-fg-amount').value = '';
+            showToast("เพิ่มงาน FG สำเร็จ!");
+            updateMiniQueue();
+        }
+
+        function updateMiniQueue() {
+            // Render logic for mini queue lists in Point & FG pages
+            const q = appState.queue.slice(0, 3);
+            const html = q.map(j => `
+                <div class="bg-white border rounded-lg p-3 flex justify-between items-center shadow-sm">
+                    <div>
+                        <div class="font-bold text-gray-700">${j.source}</div>
+                        <div class="text-sm text-gray-500">Item: ${j.item}</div>
+                    </div>
+                    <div class="text-sm font-bold ${j.status === 'Pending' ? 'text-yellow-500' : 'text-blue-500'}">${j.status}</div>
+                </div>
+            `).join('');
+
+            document.getElementById('point-mini-queue').innerHTML = html;
+            document.getElementById('fg-mini-queue').innerHTML = html;
+        }
+
+        function addJob(type, source, item, amount) {
+            const newJob = {
+                id: `J-${1000 + appState.queue.length + 1}`,
+                type,
+                source,
+                item,
+                amount,
+                status: 'Pending',
+                timestamp: Date.now()
+            };
+            appState.queue.push(newJob); // Add to end (FIFO)
+        }
+
+        // --- QR Scan Simulation ---
+        function simulateScanQR(context) {
+            showToast("Scanning QR...", "info");
+            setTimeout(() => {
+                if (context === 'point') {
+                    // Random valid station based on point
+                    let validSt = 2;
+                    if (appState.currentPoint === 4) validSt = 5;
+                    if (appState.currentPoint === 7) validSt = 8;
+                    if (appState.currentPoint === 10) validSt = 9;
+
+                    document.getElementById('input-point-station').value = validSt;
+                    document.getElementById('input-point-item').value = 'QR-PART-' + Math.floor(Math.random() * 1000);
+                } else if (context === 'fg') {
+                    document.getElementById('input-fg-item').value = Math.floor(Math.random() * 900000);
+                }
+                showToast("QR Scan Success!");
+            }, 1000);
+        }
+
+        // --- Empty Pallet Logic ---
+        function renderPallets() {
+            const grid = document.getElementById('pallet-grid');
+            grid.innerHTML = '';
+            // Responsive: 2 cols on small, 3 on md, 4 on lg
+            grid.className = `flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 px-6 h-[500px] overflow-y-auto content-start justify-center`;
+
+            // Update Status
+            const emptyCount = appState.pallets.filter(p => p.status === 'empty').length;
+            const fullCount = appState.pallets.length - emptyCount;
+            document.getElementById('pallet-status-summary').innerHTML = `<span class="text-gray-400">ว่าง:</span> <span class="text-green-600 font-bold">${emptyCount}</span> | <span class="text-gray-400">มีของ:</span> <span class="text-blue-600 font-bold">${fullCount}</span>`;
+
+            const start = (appState.pagination.pallet - 1) * CONFIG.palletPerPage;
+            const end = start + CONFIG.palletPerPage;
+            const pageData = appState.pallets.slice(start, end);
+
+            pageData.forEach(p => {
+                const isFull = p.status === 'full';
+                const btn = document.createElement('button');
+                // Adjust styling
+                btn.className = `h-32 rounded-2xl shadow-md text-2xl font-bold flex flex-col items-center justify-center gap-2 transition-transform btn-press ${isFull ? 'bg-blue-100 text-blue-700 border-2 border-blue-300' : 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'}`;
+                btn.innerHTML = `
+                    <i class="fa-solid fa-pallet ${isFull ? 'text-4xl' : 'text-2xl opacity-50'}"></i>
+                    <span>E${p.id}</span>
+                    <span class="text-sm font-normal">${isFull ? 'มี Pallet' : 'ว่าง'}</span>
+                `;
+                btn.onclick = () => togglePallet(p.id);
+                grid.appendChild(btn);
+            });
+
+            const totalPages = Math.ceil(appState.pallets.length / CONFIG.palletPerPage);
+            document.getElementById('pallet-pagination-info').innerText = `Page ${appState.pagination.pallet} / ${totalPages}`;
+        }
+
+        function togglePallet(id) {
+            const p = appState.pallets.find(x => x.id === id);
+            const action = p.status === 'full' ? 'ว่าง (Empty)' : 'มี Pallet (Full)';
+
+            showConfirmModal(`เปลี่ยนสถานะ E${id} เป็น "${action}"?`, () => {
+                p.status = p.status === 'full' ? 'empty' : 'full';
+                renderPallets();
+                showToast(`E${id} Updated`);
+            });
+        }
+
+        // --- WH Logic ---
+        function renderWH() {
+            const grid = document.getElementById('wh-grid');
+            grid.innerHTML = '';
+            // Responsive: 2 cols on small, 3 on md, 4 on lg
+            grid.className = `flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 px-6 h-[500px] overflow-y-auto content-start justify-center`;
+
+            // Update Status
+            const emptyCount = appState.wh.filter(w => w.value === null).length;
+            const fullCount = appState.wh.length - emptyCount;
+            document.getElementById('wh-status-summary').innerHTML = `<span class="text-gray-400">ว่าง:</span> <span class="text-green-600 font-bold">${emptyCount}</span> | <span class="text-gray-400">มีของ:</span> <span class="text-purple-600 font-bold">${fullCount}</span>`;
+
+            const start = (appState.pagination.wh - 1) * CONFIG.whPerPage;
+            const end = start + CONFIG.whPerPage;
+            const pageData = appState.wh.slice(start, end);
+
+            pageData.forEach(w => {
+                const hasItem = w.value !== null;
+                const btn = document.createElement('button');
+                // Updated Style: h-32, icons, larger text
+                btn.className = `h-32 rounded-2xl shadow-md text-2xl font-bold flex flex-col items-center justify-center gap-2 transition-transform btn-press ${hasItem ? 'bg-purple-100 text-purple-700 border-2 border-purple-300' : 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'}`;
+                btn.innerHTML = `
+                    <i class="fa-solid ${hasItem ? 'fa-box-open text-4xl' : 'fa-warehouse text-2xl opacity-50'}"></i>
+                    <span class="text-sm text-gray-500 mb-1">WH${w.id}</span>
+                    <span class="${hasItem ? 'text-xl' : 'text-base font-normal'} truncate w-full text-center">${hasItem ? w.value : 'ว่าง'}</span>
+                `;
+                btn.onclick = () => handleWHClick(w.id);
+                grid.appendChild(btn);
+            });
+
+            const totalPages = Math.ceil(appState.wh.length / CONFIG.whPerPage);
+            document.getElementById('wh-pagination-info').innerText = `Page ${appState.pagination.wh} / ${totalPages}`;
+        }
+
+        function handleWHClick(id) {
+            const w = appState.wh.find(x => x.id === id);
+            if (w.value) {
+                // Clear
+                showConfirmModal(`เคลียร์ WH${id} (${w.value}) เป็น "ว่าง"?`, () => {
+                    w.value = null;
+                    renderWH();
+                    showToast(`WH${id} Cleared`);
+                });
+            } else {
+                // Input
+                showInputModal(`กรอก Part สำหรับ WH${id}`, (val) => {
+                    if (val) {
+                        w.value = val;
+                        renderWH();
+                        showToast(`WH${id} Updated`);
+                    }
+                });
+            }
+        }
+
+        // --- Queue Logic ---
+        function renderQueue() {
+            // Update Status Logic: First = In Process, Others = Pending
+            if (appState.queue.length > 0) {
+                appState.queue.forEach((j, index) => {
+                    j.status = index === 0 ? 'In Process' : 'Pending';
+                });
+            }
+
+            const list = document.getElementById('queue-list');
+            list.innerHTML = '';
+
+            const start = (appState.pagination.queue - 1) * CONFIG.queuePerPage;
+            const end = start + CONFIG.queuePerPage;
+            const pageData = appState.queue.slice(start, end);
+
+            pageData.forEach((j, idx) => {
+                const row = document.createElement('div');
+                row.className = "grid grid-cols-12 gap-4 items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:bg-red-50 cursor-pointer transition-colors";
+                row.innerHTML = `
+                    <div class="col-span-1 text-center font-mono text-gray-500 text-sm">${start + idx + 1}</div>
+                    <div class="col-span-2 font-bold text-gray-700">${j.type}</div>
+                    <div class="col-span-3 text-sm text-gray-600 truncate">${j.source}</div>
+                    <div class="col-span-4 text-sm text-gray-800 font-medium truncate">${j.item} ${j.amount !== '-' ? '(x' + j.amount + ')' : ''}</div>
+                    <div class="col-span-2 text-center">
+                         <span class="px-2 py-1 rounded-full text-xs font-bold ${j.status === 'Pending' ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}">${j.status}</span>
+                    </div>
+                `;
+                row.onclick = () => openQueueDetail(j.id);
+                list.appendChild(row);
+            });
+
+            const totalPages = Math.ceil(appState.queue.length / CONFIG.queuePerPage) || 1;
+            document.getElementById('queue-pagination-info').innerText = `Page ${appState.pagination.queue} / ${totalPages}`;
+        }
+
+        function openQueueDetail(jid) {
+            const j = appState.queue.find(x => x.id === jid);
+            if (!j) return;
+
+            document.getElementById('q-detail-id').innerText = j.id;
+            document.getElementById('q-detail-type').innerText = j.type;
+            document.getElementById('q-detail-source').innerText = j.source;
+            document.getElementById('q-detail-item').innerText = j.item;
+            document.getElementById('q-detail-amount').innerText = j.amount;
+
+            const modal = document.getElementById('modal-queue-detail');
+            const overlay = document.getElementById('modal-overlay');
+            const cancelBtn = document.getElementById('q-detail-cancel-btn');
+
+            cancelBtn.onclick = () => {
+                showConfirmModal("ต้องการลบงานนี้ใช่หรือไม่?", () => {
+                    appState.queue = appState.queue.filter(x => x.id !== jid);
+                    renderQueue();
+                    // close detail modal
+                    modal.classList.add('hidden');
+                    overlay.classList.add('hidden');
+                    showToast("ลบงานเรียบร้อย");
+                });
+            };
+
+            overlay.classList.remove('hidden');
+            modal.classList.remove('hidden');
+        }
+
+        // --- AMR Logic ---
+        function controlAMR(action) {
+            showToast(`สั่งการ: ${action}`, "info");
+
+            // Simulate status change
+            if (action === 'ทำงานต่อ') {
+                appState.amr.status = 'Running';
+                appState.amr.wifi = true;
+            } else if (action === 'หยุดชั่วคราว') {
+                appState.amr.status = 'Paused';
+            } else if (action === 'กลับจุดชาร์จ') {
+                appState.amr.status = 'Charging';
+                appState.amr.wifi = false; // Simulate connection drop for fun
+            }
+
+            updateGlobalIcons();
+        }
+
+        function updateGlobalIcons() {
+            const wifiEl = document.getElementById('wifi-icon');
+            if (appState.amr.wifi) {
+                wifiEl.className = "fa-solid fa-wifi text-green-500 text-lg";
+            } else {
+                wifiEl.className = "fa-solid fa-wifi text-red-500 text-lg";
+            }
+
+            // Simulate slight battery drain
+            if (appState.amr.status === 'Running') appState.amr.battery -= 1;
+            if (appState.amr.status === 'Charging') appState.amr.battery += 5;
+            if (appState.amr.battery > 100) appState.amr.battery = 100;
+
+            document.getElementById('battery-text').innerText = appState.amr.battery + "%";
+            const batIcon = document.getElementById('battery-icon');
+            if (appState.amr.battery > 70) batIcon.className = "fa-solid fa-battery-full text-green-500 text-lg";
+            else if (appState.amr.battery > 30) batIcon.className = "fa-solid fa-battery-half text-yellow-500 text-lg";
+            else batIcon.className = "fa-solid fa-battery-quarter text-red-500 text-lg";
+        }
+
+        // Loop update for battery simulation
+        setInterval(updateGlobalIcons, 5000);
+
+
+        // --- Generic Utility Functions ---
+        function nextPage(type) {
+            const max = Math.ceil((type === 'queue' ? appState.queue.length : type === 'pallet' ? appState.pallets.length : appState.wh.length) / CONFIG[type + 'PerPage']);
+            if (appState.pagination[type] < max) {
+                appState.pagination[type]++;
+            } else {
+                appState.pagination[type] = 1; // Loop to first
+            }
+            if (type === 'pallet') renderPallets();
+            if (type === 'wh') renderWH();
+            if (type === 'queue') renderQueue();
+        }
+
+        function prevPage(type) {
+            const max = Math.ceil((type === 'queue' ? appState.queue.length : type === 'pallet' ? appState.pallets.length : appState.wh.length) / CONFIG[type + 'PerPage']);
+            if (appState.pagination[type] > 1) {
+                appState.pagination[type]--;
+            } else {
+                appState.pagination[type] = max; // Loop to last
+            }
+            if (type === 'pallet') renderPallets();
+            if (type === 'wh') renderWH();
+            if (type === 'queue') renderQueue();
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+
+            // Reset classes
+            toast.className = `fixed bottom-10 left-1/2 transform -translate-x-1/2 px-8 py-4 rounded-full shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none z-50 text-xl font-bold flex items-center gap-3`;
+
+            if (type === 'error') toast.classList.add('bg-red-600', 'text-white');
+            else if (type === 'info') toast.classList.add('bg-blue-600', 'text-white');
+            else toast.classList.add('bg-gray-800', 'text-white'); // default
+
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        // --- Modal System ---
+        let confirmCallback = null;
+        let inputCallback = null;
+
+        function showConfirmModal(msg, callback) {
+            document.getElementById('modal-confirm-msg').innerText = msg;
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            document.getElementById('modal-confirm').classList.remove('hidden');
+            confirmCallback = callback;
+        }
+
+        function showInputModal(msg, callback) {
+            document.getElementById('modal-input-msg').innerText = msg;
+            document.getElementById('modal-input-field').value = '';
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            document.getElementById('modal-input').classList.remove('hidden');
+            inputCallback = callback;
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+            document.querySelectorAll('#modal-overlay > div').forEach(d => d.classList.add('hidden'));
+            confirmCallback = null;
+            inputCallback = null;
+        }
+
+        document.getElementById('modal-confirm-btn').onclick = () => {
+            if (confirmCallback) confirmCallback();
+            closeModal();
+        };
+
+        document.getElementById('modal-input-btn').onclick = () => {
+            const val = document.getElementById('modal-input-field').value;
+            if (inputCallback) inputCallback(val);
+            closeModal();
+        };
+
+        // Initialize
+        // Initialize
+        if (window.location.hash) {
+            renderPage(window.location.hash.substring(1));
+        } else {
+            navigateTo('page-main');
+        }
+
+    </script>
+</body>
+
+</html>
