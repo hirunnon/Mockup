@@ -130,7 +130,7 @@
         </div>
 
         <!-- Page: Point Menu -->
-        <div id="page-point-menu" class="page hidden absolute inset-0 p-6 flex-col items-center">
+        <div id="page-point-menu" class="page hidden absolute inset-0 p-6 flex-col items-center overflow-y-auto">
             <div class="w-full max-w-5xl flex justify-between items-center mb-6">
                 <button onclick="navigateTo('page-main')"
                     class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
@@ -251,8 +251,8 @@
         </div>
 
         <!-- Page: Empty Pallet -->
-        <div id="page-empty-pallet" class="page hidden absolute inset-0 p-6 flex-col items-center">
-            <div class="w-[95%] max-w-none flex justify-between items-center mb-4">
+        <div id="page-empty-pallet" class="page hidden absolute inset-0 p-6 flex-col items-center overflow-y-auto">
+            <div class="w-[95%] w-full max-w-5xl flex justify-between items-center mb-4">
                 <button onclick="navigateTo('page-main')"
                     class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
                     <i class="fa-solid fa-arrow-left"></i> Back
@@ -264,7 +264,7 @@
                 </div>
             </div>
 
-            <div class="flex-1 w-[95%] max-w-none flex flex-col items-center">
+            <div class="flex-1 w-[95%] w-full max-w-5xl flex flex-col items-center">
                 <div id="pallet-grid"
                     class="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 px-6 overflow-y-auto content-start w-full justify-center">
                     <!-- JS Generated Buttons -->
@@ -272,7 +272,7 @@
             </div>
 
             <!-- Footer Pagination -->
-            <div class="w-[95%] max-w-none flex justify-center items-center space-x-6 mt-4 pb-2">
+            <div class="w-[95%] w-full max-w-5xl flex justify-center items-center space-x-6 mt-4 pb-2">
                 <button id="btn-pallet-prev" onclick="prevPage('pallet')"
                     class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500 hover:bg-gray-100">
                     <i class="fa-solid fa-chevron-left"></i>
@@ -287,8 +287,8 @@
         </div>
 
         <!-- Page: WH Management -->
-        <div id="page-wh" class="page hidden absolute inset-0 p-6 flex-col items-center">
-            <div class="w-[95%] max-w-none flex justify-between items-center mb-4">
+        <div id="page-wh" class="page hidden absolute inset-0 p-6 flex-col items-center overflow-y-auto">
+            <div class="w-[95%] w-full max-w-5xl flex justify-between items-center mb-4">
                 <button onclick="navigateTo('page-main')"
                     class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
                     <i class="fa-solid fa-arrow-left"></i> Back
@@ -300,7 +300,7 @@
                 </div>
             </div>
 
-            <div class="flex-1 w-[95%] max-w-none flex flex-col items-center">
+            <div class="flex-1 w-[95%] w-full max-w-5xl flex flex-col items-center">
                 <div id="wh-grid"
                     class="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 px-6 overflow-y-auto content-start w-full justify-center">
                     <!-- JS Generated Buttons -->
@@ -308,7 +308,7 @@
             </div>
 
             <!-- Footer Pagination -->
-            <div class="w-[95%] max-w-none flex justify-center items-center space-x-6 mt-4 pb-2">
+            <div class="w-[95%] w-full max-w-5xl flex justify-center items-center space-x-6 mt-4 pb-2">
                 <button id="btn-wh-prev" onclick="prevPage('wh')"
                     class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500 hover:bg-gray-100">
                     <i class="fa-solid fa-chevron-left"></i>
@@ -348,21 +348,21 @@
             </div>
 
             <div class="flex items-center space-x-4 mt-4">
-                <button onclick="prevPage('queue')"
+                <button id="btn-queue-prev" onclick="prevPage('queue')"
                     class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500"><i
                         class="fa-solid fa-chevron-left"></i></button>
                 <span id="queue-pagination-info" class="font-medium text-gray-600">Page 1 / 1</span>
-                <button onclick="nextPage('queue')"
+                <button id="btn-queue-next" onclick="nextPage('queue')"
                     class="btn-press w-12 h-12 rounded-full bg-white shadow flex items-center justify-center text-gray-500"><i
                         class="fa-solid fa-chevron-right"></i></button>
             </div>
         </div>
 
         <!-- Page: AMR Control -->
-        <div id="page-amr" class="page hidden absolute inset-0 p-6 flex-col items-center">
+        <div id="page-amr" class="page hidden absolute inset-0 p-6 flex-col items-center overflow-y-auto">
             <div class="w-full max-w-5xl flex justify-between items-center mb-6">
                 <button onclick="navigateTo('page-main')"
-                    class="btn-press bg-white text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2 border border-gray-300 shadow">
+                    class="btn-press bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2">
                     <i class="fa-solid fa-arrow-left"></i> Back
                 </button>
                 <div class="text-2xl font-bold text-gray-700">AMR Control Panel</div>
@@ -904,6 +904,17 @@
 
             const totalPages = Math.ceil(appState.queue.length / CONFIG.queuePerPage) || 1;
             document.getElementById('queue-pagination-info').innerText = `Page ${appState.pagination.queue} / ${totalPages}`;
+
+            // Hide pagination if single page
+            const prevBtn = document.getElementById('btn-queue-prev');
+            const nextBtn = document.getElementById('btn-queue-next');
+            if (totalPages <= 1) {
+                prevBtn.classList.add('hidden');
+                nextBtn.classList.add('hidden');
+            } else {
+                prevBtn.classList.remove('hidden');
+                nextBtn.classList.remove('hidden');
+            }
         }
 
         function openQueueDetail(jid) {
