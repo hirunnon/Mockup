@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS - Local Standalone</title>
+
+    <!-- Tailwind CSS (For Offline: Download tailwind script and link locally) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Import Map (For Offline: Host these files locally) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+      }
+    }
+    </script>
+
+    <!-- Babel (For Offline: Pre-compile JSX or host babel locally) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Google Fonts (Optional) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            .print-only {
+                display: block !important;
+            }
+
+            body {
+                background: white;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+
+        // Lucide Icons (For Offline: Download lucide-react or use SVG directly)
+        import {
+            Package, QrCode, ArrowDownCircle, ArrowUpCircle,
+            AlertTriangle, Printer, Trash2, Plus, Search,
+            Zap, Clock, LayoutGrid, List, X, Save, CheckCircle
+        } from 'https://esm.sh/lucide-react@0.294.0?external=react';
+
+        // --- Mock Database / LocalStorage Service ---
+        // เมื่อเปลี่ยนเป็น Node-RED ให้แก้ฟังก์ชันเหล่านี้เป็น fetch() ไปยัง API Endpoint
+        const DB = {
+            getParts: () => {
+                const data = localStorage.getItem('sirius_parts');
+                return data ? JSON.parse(data) : [];
+            },
+            saveParts: (parts) => {
+                localStorage.setItem('sirius_parts', JSON.stringify(parts));
+            },
+            getHistory: () => {
+                const data = localStorage.getItem('sirius_scan_history');
+                return data ? JSON.parse(data) : [];
+            },
+            saveHistory: (history) => {
+                localStorage.setItem('sirius_scan_history', JSON.stringify(history));
+            }
+        };
+
+        // --- Components ---
+
+        const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md" }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                    <div className={`bg-white rounded-lg shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}>
+                        <div className="flex justify-between items-center p-4 border-b">
+                            <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+                            <button onClick={onClose} className="text-gray-500 hover:text-red-500 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-4">{children}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Sub-Components/Pages ---
+
+        const Dashboard = ({ parts, setParts, seedData }) => {
+            const [searchTerm, setSearchTerm] = useState('');
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [editPart, setEditPart] = useState(null);
+            const [sortConfig, setSortConfig] = useState({ key: null, direction: 'none' }); // 'asc', 'desc', 'none'
+            const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'Normal', 'Low Stock'
+
+            const handleSort = (key) => {
+                let direction = 'asc';
+                if (sortConfig.key === key) {
+                    if (sortConfig.direction === 'asc') direction = 'desc';
+                    else if (sortConfig.direction === 'desc') direction = 'none';
+                }
+                setSortConfig({ key, direction });
+            };
+
+            let processedParts = parts.filter(p =>
+                p.partNo.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            // Filter by Status
+            if (statusFilter !== 'all') {
+                processedParts = processedParts.filter(p => {
+                    const targetValue = Math.round((Number(p.qtyStock || 0) * Number(p.targetPercent || 0)) / 100);
+                    const isLow = p.current < targetValue;
+                    return statusFilter === 'Low Stock' ? isLow : !isLow;
+                });
+            }
+
+            // Sorting Logic
+            if (sortConfig.direction !== 'none') {
+                processedParts.sort((a, b) => {
+                    let aVal, bVal;
+                    if (sortConfig.key === 'target') {
+                        aVal = Math.round((Number(a.qtyStock || 0) * Number(a.targetPercent || 0)) / 100);
+                        bVal = Math.round((Number(b.qtyStock || 0) * Number(b.targetPercent || 0)) / 100);
+                    } else if (sortConfig.key === 'remain') {
+                        aVal = a.current;
+                        bVal = b.current;
+                    } else if (sortConfig.key === 'qtyStock') {
+                        aVal = Number(a.qtyStock || 0);
+                        bVal = Number(b.qtyStock || 0);
+                    } else {
+                        aVal = a[sortConfig.key];
+                        bVal = b[sortConfig.key];
+                    }
+
+                    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            const NewPartForm = () => {
+                const [formData, setFormData] = useState({ partNo: '', qtyStock: 0, targetPercent: 50, current: 0, qtyPerBox: 1 });
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    const newPart = {
+                        ...formData,
+                        id: Date.now().toString(),
+                        qtyStock: Number(formData.qtyStock),
+                        targetPercent: Number(formData.targetPercent),
+                        current: Number(formData.current),
+                        qtyPerBox: Number(formData.qtyPerBox),
+                        boxes: [],
+                        lastUpdate: new Date().toISOString()
+                    };
+                    setParts(prev => [...prev, newPart]);
+                    setShowAddModal(false);
+                };
+
+                return (
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <div>
+                            <label className="text-xs text-gray-500">Part No.</label>
+                            <input required placeholder="Part No." className="w-full p-2 border rounded" onChange={e => setFormData({ ...formData, partNo: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="text-xs text-gray-500">Q'ty Stock</label>
+                                <input type="number" required className="w-full p-2 border rounded" onChange={e => setFormData({ ...formData, qtyStock: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500">Target %</label>
+                                <input type="number" required className="w-full p-2 border rounded" value={formData.targetPercent} onChange={e => setFormData({ ...formData, targetPercent: e.target.value })} />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="text-xs text-gray-500">Remain</label>
+                                <input type="number" required className="w-full p-2 border rounded" onChange={e => setFormData({ ...formData, current: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500">Qty/Box</label>
+                                <input type="number" required className="w-full p-2 border rounded" onChange={e => setFormData({ ...formData, qtyPerBox: e.target.value })} />
+                            </div>
+                        </div>
+                        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Add Part</button>
+                    </form>
+                );
+            };
+
+            const EditPartForm = ({ part, onSave, onDelete }) => {
+                const [formData, setFormData] = useState({ ...part });
+                const [showConfirm, setShowConfirm] = useState(false);
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    onSave({
+                        ...formData,
+                        qtyStock: Number(formData.qtyStock),
+                        targetPercent: Number(formData.targetPercent),
+                        current: Number(formData.current),
+                        qtyPerBox: Number(formData.qtyPerBox)
+                    });
+                };
+
+                return (
+                    <div className="space-y-4">
+                        <form onSubmit={handleSubmit} className="space-y-3">
+                            <div>
+                                <label className="text-xs text-gray-500">Part No.</label>
+                                <input required placeholder="Part No." className="w-full p-2 border rounded" value={formData.partNo} onChange={e => setFormData({ ...formData, partNo: e.target.value })} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-xs text-gray-500">Q'ty Stock</label>
+                                    <input type="number" required className="w-full p-2 border rounded" value={formData.qtyStock || 0} onChange={e => setFormData({ ...formData, qtyStock: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">Target %</label>
+                                    <input type="number" required className="w-full p-2 border rounded" value={formData.targetPercent || 0} onChange={e => setFormData({ ...formData, targetPercent: e.target.value })} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-xs text-gray-500">Remain</label>
+                                    <input type="number" required className="w-full p-2 border rounded" value={formData.current} onChange={e => setFormData({ ...formData, current: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">Qty/Box</label>
+                                    <input type="number" required className="w-full p-2 border rounded" value={formData.qtyPerBox} onChange={e => setFormData({ ...formData, qtyPerBox: e.target.value })} />
+                                </div>
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold">Save Changes</button>
+                        </form>
+                        <div className="border-t pt-4">
+                            <button
+                                onClick={() => setShowConfirm(true)}
+                                className="w-full bg-red-50 text-red-600 border border-red-200 p-2 rounded hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center space-x-2"
+                            >
+                                <Trash2 size={18} />
+                                <span>Delete Part</span>
+                            </button>
+                        </div>
+
+                        <Modal isOpen={showConfirm} onClose={() => setShowConfirm(false)} title="Confirm Delete" maxWidth="max-w-xs">
+                            <div className="text-center space-y-4">
+                                <p className="text-gray-600">Are you sure you want to delete Part No. <span className="font-bold text-gray-800">{part.partNo}</span>?</p>
+                                <div className="flex space-x-2">
+                                    <button onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border rounded hover:bg-gray-100">Cancel</button>
+                                    <button onClick={() => onDelete(part.id)} className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+                                </div>
+                            </div>
+                        </Modal>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="space-y-4 animate-fade-in">
+                    <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded shadow-sm gap-4">
+                        <div className="flex items-center space-x-2 w-full md:w-auto">
+                            <Search size={20} className="text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search Part No / Name..."
+                                className="outline-none border-b focus:border-blue-500 transition-colors w-full md:w-64"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center space-x-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition w-full md:w-auto justify-center"
+                        >
+                            <Plus size={18} /> <span>New Part</span>
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow overflow-x-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
+                                <tr>
+                                    <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('partNo')}>
+                                        Part No. {sortConfig.key === 'partNo' && (sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : '')}
+                                    </th>
+                                    <th className="p-3 text-center cursor-pointer hover:bg-gray-200" onClick={() => handleSort('qtyStock')}>
+                                        Q'ty Stock {sortConfig.key === 'qtyStock' && (sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : '')}
+                                    </th>
+                                    <th className="p-3 text-center cursor-pointer hover:bg-gray-200" onClick={() => handleSort('qtyPerBox')}>
+                                        Qty/Box {sortConfig.key === 'qtyPerBox' && (sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : '')}
+                                    </th>
+                                    <th className="p-3 text-center cursor-pointer hover:bg-gray-200" onClick={() => handleSort('remain')}>
+                                        Remain {sortConfig.key === 'remain' && (sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : '')}
+                                    </th>
+                                    <th className="p-3 text-center cursor-pointer hover:bg-gray-200" onClick={() => handleSort('target')}>
+                                        Target {sortConfig.key === 'target' && (sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : '')}
+                                    </th>
+                                    <th className="p-3 text-center">
+                                        <div className="flex items-center justify-center space-x-1">
+                                            <select
+                                                className="bg-transparent border-none outline-none font-bold text-gray-700 cursor-pointer"
+                                                value={statusFilter}
+                                                onChange={(e) => setStatusFilter(e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <option value="all">All</option>
+                                                <option value="Normal">Normal</option>
+                                                <option value="Low Stock">Low Stock</option>
+                                            </select>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {processedParts.length === 0 ? (
+                                    <tr><td colSpan="6" className="p-8 text-center text-gray-400">No data found. <button onClick={seedData} className="text-blue-500 underline">Add Demo Data</button></td></tr>
+                                ) : processedParts.map((part, idx) => {
+                                    const targetValue = Math.round((Number(part.qtyStock || 0) * Number(part.targetPercent || 0)) / 100);
+                                    const isLow = part.current < targetValue;
+                                    return (
+                                        <tr key={part.id} className="hover:bg-gray-50 border-b">
+                                            <td className="p-3 text-blue-600 font-semibold cursor-pointer hover:underline" onClick={() => setEditPart(part)}>
+                                                {part.partNo}
+                                            </td>
+                                            <td className="p-3 text-center font-mono text-gray-600">{(part.qtyStock || 0).toLocaleString()}</td>
+                                            <td className="p-3 text-center font-mono">{part.qtyPerBox}</td>
+                                            <td className={`p-3 text-center font-bold font-mono ${isLow ? 'text-red-500' : 'text-green-500'}`}>
+                                                {part.current.toLocaleString()}
+                                            </td>
+                                            <td className="p-3 text-center font-mono">
+                                                {part.targetPercent || 0}% (&lt;{targetValue.toLocaleString()})
+                                            </td>
+                                            <td className="p-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${isLow ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                                    {isLow ? 'Low Stock' : 'Normal'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add New Part">
+                        <NewPartForm />
+                    </Modal>
+
+                    <Modal isOpen={!!editPart} onClose={() => setEditPart(null)} title="Edit Part">
+                        {editPart && (
+                            <EditPartForm
+                                part={editPart}
+                                onSave={(updated) => {
+                                    setParts(prev => prev.map(p => p.id === updated.id ? updated : p));
+                                    setEditPart(null);
+                                }}
+                                onDelete={(id) => {
+                                    setParts(prev => prev.filter(p => p.id !== id));
+                                    setEditPart(null);
+                                }}
+                            />
+                        )}
+                    </Modal>
+                </div>
+            );
+        };
+
+        const StockIn = ({ parts, setParts, recordScan, isDuplicateImport }) => {
+            const [inputStr, setInputStr] = useState('');
+            const [successModal, setSuccessModal] = useState(null); // { partNo, qty, count }
+            const [errorModal, setErrorModal] = useState(null); // { title, text }
+            const inputRef = useRef(null);
+
+            const handleProcess = (manualData = null) => {
+                console.log('handleProcess triggered', { manualData, inputStr });
+                let partNo, qty, refId, fullRefId;
+
+                if (manualData) {
+                    partNo = manualData.partNo;
+                    qty = parseInt(manualData.qty);
+                    const now = new Date();
+                    const dateStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+                    refId = `MANUAL-${Date.now()}`;
+                    // Virtual input for manual to simulate splitting
+                    fullRefId = `001&${dateStr}&${partNo}&${qty}&${refId}`;
+                } else {
+                    // Format: 001&10/10/2025&2450616-T&80&MJ5121J4
+                    fullRefId = inputStr.trim();
+                    const partsArr = fullRefId.split('&');
+                    if (partsArr.length < 5) {
+                        console.error('Invalid QR Format', partsArr);
+                        setErrorModal({ title: 'Invalid QR Format', text: 'รูปแบบ QR Code ไม่ถูกต้อง กรุณาตรวจสอบข้อมูล' });
+                        return;
+                    }
+                    partNo = partsArr[2];
+                    qty = parseInt(partsArr[3]);
+                    refId = partsArr[4];
+                }
+
+                if (isDuplicateImport(refId)) {
+                    setErrorModal({ title: 'Duplicate QR Code', text: `รหัส ${refId} นี้ได้รับการสแกนเข้าสู่ระบบไปแล้ว` });
+                    setInputStr('');
+                    return;
+                }
+
+                const partIndex = parts.findIndex(p => p.partNo === partNo);
+                if (partIndex === -1) {
+                    setErrorModal({ title: 'Part Not Found', text: `ไม่พบชุดข้อมูลของ Part No. ${partNo} ในระบบ` });
+                    return;
+                }
+
+                const partDoc = parts[partIndex];
+                const qpb = partDoc.qtyPerBox || 1;
+
+                if (qty % qpb !== 0) {
+                    const remainder = qty % qpb;
+                    const needed = qpb - remainder;
+                    console.warn('Quantity Mismatch', { qty, qpb, remainder, needed });
+                    setErrorModal({
+                        title: 'Quantity Mismatch',
+                        text: `จำนวนไม่ถูกต้องเนื่องจาก 'Qty/Box' คือ ${qpb} มีส่วนที่เกินมา ${remainder} หรือขาดอีก ${needed} ถึงจะแบ่งกล่องลงตัว`
+                    });
+                    return;
+                }
+
+                const numBoxes = Math.ceil(qty / qpb);
+                const newBoxes = [];
+
+                const inputParts = fullRefId.split('&');
+                const prefix = inputParts.slice(0, 3).join('&'); // 001&10/10/2025&PartNo
+                const shelfRef = inputParts[4]; // Ref
+
+                let remainingQty = qty;
+                for (let i = 0; i < numBoxes; i++) {
+                    const boxQty = Math.min(remainingQty, qpb);
+                    const splitNo = (i + 1).toString().padStart(3, '0');
+                    const boxDataString = `${inputParts[0]}&${inputParts[1]}&${partNo}&${boxQty}&${shelfRef}&${splitNo}`;
+
+                    newBoxes.push({
+                        boxId: boxDataString,
+                        displayId: `${shelfRef}-${splitNo}`,
+                        qty: boxQty,
+                        refId: shelfRef,
+                        splitNo: splitNo,
+                        createdAt: new Date().toISOString()
+                    });
+                    remainingQty -= boxQty;
+                }
+
+                // Update State (Node-RED: POST /api/stock-in)
+                const updatedParts = [...parts];
+                const updatedPart = { ...partDoc };
+
+                updatedPart.current = (updatedPart.current || 0) + qty;
+                updatedPart.boxes = [...(updatedPart.boxes || []), ...newBoxes];
+                updatedPart.lastUpdate = new Date().toISOString();
+
+                updatedParts[partIndex] = updatedPart;
+
+                setParts(updatedParts);
+                recordScan(refId);
+
+                console.log('Setting Success Modal', { partNo, qty, boxCount: newBoxes.length });
+                setSuccessModal({ partNo, qty, count: newBoxes.length });
+                setInputStr('');
+                if (inputRef.current) inputRef.current.focus();
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') handleProcess();
+            };
+
+            const ManualAdd = ({ onAdd }) => {
+                const [mPart, setMPart] = useState('');
+                const [mQty, setMQty] = useState('');
+
+                const handleAdd = () => {
+                    onAdd({ partNo: mPart, qty: mQty });
+                    setMPart('');
+                    setMQty('');
+                };
+
+                return (
+                    <div className="bg-gray-50 p-4 rounded border mb-4">
+                        <h4 className="text-sm font-bold text-gray-700 mb-2">Manual Entry</h4>
+                        <div className="flex gap-2">
+                            <select
+                                className="p-2 border rounded flex-1"
+                                value={mPart}
+                                onChange={e => setMPart(e.target.value)}
+                            >
+                                <option value="">Select Part...</option>
+                                {parts.map(p => <option key={p.id} value={p.partNo}>{p.partNo}</option>)}
+                            </select>
+                            <input
+                                type="number"
+                                placeholder="Qty"
+                                className="p-2 border rounded w-24"
+                                value={mQty}
+                                onChange={e => setMQty(e.target.value)}
+                            />
+                            <button
+                                onClick={handleAdd}
+                                disabled={!mPart || !mQty}
+                                className="bg-green-600 text-white px-4 rounded hover:bg-green-700"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-4xl mx-auto space-y-6">
+                    <div className="bg-white p-6 rounded shadow-md">
+                        <div className="flex items-center space-x-3 mb-4">
+                            <QrCode className="text-blue-600" size={32} />
+                            <h2 className="text-xl font-bold">Stock In (Scan QR)</h2>
+                        </div>
+
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={inputStr}
+                                onChange={(e) => setInputStr(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Scan QR Code here..."
+                                className="w-full p-3 text-lg border-2 border-blue-200 rounded focus:border-blue-500 focus:outline-none"
+                                autoFocus
+                            />
+                            <button onClick={() => handleProcess()} className="bg-blue-600 text-white px-6 rounded font-bold">OK</button>
+                        </div>
+
+                        <ManualAdd onAdd={handleProcess} />
+                    </div>
+
+                    <Modal isOpen={!!errorModal} onClose={() => setErrorModal(null)} title={errorModal?.title || "Error"} maxWidth="max-w-xs">
+                        <div className="text-center space-y-4">
+                            <div className="mx-auto w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="font-bold text-lg text-gray-800">{errorModal?.title}</p>
+                                <p className="text-sm text-gray-500">{errorModal?.text}</p>
+                            </div>
+                            <button onClick={() => setErrorModal(null)} className="w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold">OK</button>
+                        </div>
+                    </Modal>
+
+                    <Modal isOpen={!!successModal} onClose={() => setSuccessModal(null)} title="Success" maxWidth="max-w-xs">
+                        <div className="text-center space-y-4">
+                            <div className="mx-auto w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+                                <CheckCircle size={32} />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="font-bold text-lg text-gray-800">Item Added!</p>
+                                <p className="text-sm text-gray-500">
+                                    เพิ่ม <span className="font-bold text-blue-600">{successModal?.partNo}</span><br />
+                                    จำนวน <span className="font-bold">{successModal?.qty}</span> แบ่งออกเป็น <span className="font-bold">{successModal?.count}</span> กล่อง สำเร็จ
+                                </p>
+                            </div>
+                            <button onClick={() => setSuccessModal(null)} className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold">OK</button>
+                        </div>
+                    </Modal>
+
+                </div>
+            );
+        };
+
+        const StockOut = ({ parts, setParts }) => {
+            const [selectedPartNo, setSelectedPartNo] = useState('');
+            const [scanBoxId, setScanBoxId] = useState('');
+            const [feedback, setFeedback] = useState(null);
+            const [zoomBox, setZoomBox] = useState(null);
+            const [showPrintModal, setShowPrintModal] = useState(false);
+
+            const selectedPart = parts.find(p => p.partNo === selectedPartNo);
+            const activeBoxes = selectedPart?.boxes || [];
+            const availableRefs = [...new Set(activeBoxes.map(b => b.refId))];
+
+            const handleBoxScan = () => {
+                let targetPartIndex = -1;
+
+                // Search for the boxId across all parts
+                targetPartIndex = parts.findIndex(p => p.boxes?.some(b => b.boxId === scanBoxId));
+
+                if (targetPartIndex === -1) {
+                    setFeedback({ type: 'error', text: `Box ID ${scanBoxId} not found.` });
+                    setScanBoxId('');
+                    return;
+                }
+
+                const targetPart = parts[targetPartIndex];
+                const targetBox = targetPart.boxes.find(b => b.boxId === scanBoxId);
+
+                if (!targetBox) {
+                    setFeedback({ type: 'error', text: 'Box not found in inventory.' });
+                    return;
+                }
+
+                const removeQty = targetBox.qty;
+
+                // Update State
+                const updatedParts = [...parts];
+                const updatedPart = { ...targetPart };
+
+                updatedPart.boxes = updatedPart.boxes.filter(b => b.boxId !== scanBoxId);
+                updatedPart.current = Math.max(0, updatedPart.current - removeQty);
+                updatedPart.lastUpdate = new Date().toISOString();
+
+                updatedParts[targetPartIndex] = updatedPart;
+                setParts(updatedParts);
+
+                setFeedback({ type: 'success', text: `Withdrawn Box ${targetBox.displayId || scanBoxId} (${removeQty} pcs) from ${updatedPart.partNo}` });
+                setScanBoxId('');
+                setSelectedPartNo(updatedPart.partNo);
+            };
+
+            const handleManualWithdraw = (targetBoxId, qty) => {
+                const targetPartIndex = parts.findIndex(p => p.partNo === selectedPart.partNo);
+                if (targetPartIndex === -1) return;
+
+                const updatedParts = [...parts];
+                const updatedPart = { ...updatedParts[targetPartIndex] };
+
+                // Precisely remove the specific box by ID to avoid multiple removals
+                updatedPart.boxes = updatedPart.boxes.filter(b => b.boxId !== targetBoxId);
+                updatedPart.current = Math.max(0, updatedPart.current - qty);
+                updatedPart.lastUpdate = new Date().toISOString();
+
+                updatedParts[targetPartIndex] = updatedPart;
+                setParts(updatedParts);
+
+                setFeedback({ type: 'success', text: `Manually withdrawn Box ${targetBoxId}` });
+            };
+
+            const handlePrintRef = () => {
+                if (!selectedPart || activeBoxes.length === 0) return;
+                setShowPrintModal(true);
+            };
+
+            const executePrint = (targetRef) => {
+                const boxesToPrint = activeBoxes.filter(b => b.refId === targetRef);
+
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                        <html>
+                            <head>
+                                <title>Print QR Labels - ${targetRef}</title>
+                                <style>
+                                    @page { size: A4; margin: 10mm; }
+                                    body { font-family: sans-serif; }
+                                    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+                                    .label { border: 1px solid #ccc; padding: 10px; text-align: center; font-size: 10px; break-inside: avoid; }
+                                    .label p { margin: 2px 0; font-weight: bold; }
+                                </style>
+                            </head>
+                            <body>
+                                <h2 style="text-align: center;">Ref: ${targetRef} (${selectedPart.partNo})</h2>
+                                <div class="grid">
+                                    ${boxesToPrint.map(box => `
+                                        <div class="label">
+                                            <p>${box.displayId || box.boxId}</p>
+                                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(box.boxId)}" />
+                                            <p>Qty: ${box.qty}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </body>
+                        </html>
+                    `);
+                printWindow.document.close();
+                printWindow.focus();
+                setTimeout(() => {
+                    printWindow.print();
+                }, 500);
+                setShowPrintModal(false);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white p-6 rounded shadow-md col-span-1 h-fit">
+                        <h2 className="text-xl font-bold mb-4 flex items-center"><ArrowUpCircle className="mr-2 text-orange-500" /> Stock Out</h2>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Scan Box ID</label>
+                            <div className="flex">
+                                <input
+                                    value={scanBoxId}
+                                    onChange={e => setScanBoxId(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleBoxScan()}
+                                    className="w-full p-2 border rounded-l focus:outline-none focus:border-orange-500"
+                                    placeholder="Scan Box QR..."
+                                    autoFocus
+                                />
+                                <button onClick={handleBoxScan} className="bg-orange-500 text-white px-3 rounded-r"><Zap size={18} /></button>
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <button
+                                onClick={handlePrintRef}
+                                disabled={!selectedPart || activeBoxes.length === 0}
+                                className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:bg-gray-300"
+                            >
+                                <Printer size={18} />
+                                <span>Print QR Labels</span>
+                            </button>
+                        </div>
+
+                        <div className="mb-4">
+                            <div className="border-t my-4"></div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Or Select Part</label>
+                            <select
+                                className="w-full p-2 border rounded"
+                                value={selectedPartNo}
+                                onChange={e => { setSelectedPartNo(e.target.value); setFeedback(null); }}
+                            >
+                                <option value="">-- Select Part to View --</option>
+                                {parts.map(p => <option key={p.id} value={p.partNo}>{p.partNo}</option>)}
+                            </select>
+                        </div>
+
+                        {feedback && (
+                            <div className={`p-3 rounded text-sm ${feedback.type === 'error' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                {feedback.text}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white p-6 rounded shadow-md col-span-1 md:col-span-2 min-h-[400px]">
+                        {selectedPart ? (
+                            <>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-gray-800">{selectedPart.partNo}</h3>
+                                        <p className="text-gray-500">{selectedPart.partName} | Total Stock: {selectedPart.current}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="block text-xs text-gray-400">Available Boxes</span>
+                                        <span className="text-2xl font-bold text-blue-600">{activeBoxes.length}</span>
+                                    </div>
+                                </div>
+
+                                {activeBoxes.length === 0 ? (
+                                    <div className="text-center py-10 text-gray-400 border-2 border-dashed rounded">
+                                        No boxes available in stock for this part.
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {activeBoxes.map((box, idx) => (
+                                            <div key={idx} className="border rounded p-3 hover:shadow-md transition-shadow relative bg-white group cursor-pointer" onClick={() => setZoomBox(box)}>
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p className="font-bold text-gray-700 text-sm">{box.displayId || box.boxId}</p>
+                                                        <p className="text-xs text-gray-500">{new Date(box.createdAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">{box.qty} ea</span>
+                                                </div>
+                                                <div className="mt-3 flex justify-between items-center">
+                                                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${encodeURIComponent(box.boxId)}`} className="w-10 h-10 opacity-50" alt="qr" />
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleManualWithdraw(box.boxId, box.qty); }}
+                                                        className="bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-sm hover:bg-red-600 hover:text-white transition-colors"
+                                                    >
+                                                        Withdraw
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <Modal isOpen={!!zoomBox} onClose={() => setZoomBox(null)} title="Scan QR Code" maxWidth="max-w-sm">
+                                    {zoomBox && (
+                                        <div className="flex flex-col items-center space-y-4">
+                                            <p className="font-bold text-lg">{zoomBox.displayId}</p>
+                                            <img
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(zoomBox.boxId)}`}
+                                                alt="Large QR"
+                                                className="w-full border p-2 rounded shadow-sm"
+                                            />
+                                            <div className="text-center text-sm text-gray-500">
+                                                <p>Qty: {zoomBox.qty}</p>
+                                                <p className="text-[10px] break-all mt-2">{zoomBox.boxId}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </Modal>
+
+                                <Modal isOpen={showPrintModal} onClose={() => setShowPrintModal(false)} title="Select Ref to Print" maxWidth="max-w-xs">
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-gray-500 mb-2">Choose which Reference to print labels for:</p>
+                                        {availableRefs.map(ref => (
+                                            <button
+                                                key={ref}
+                                                onClick={() => executePrint(ref)}
+                                                className="w-full text-left p-3 border rounded hover:bg-blue-50 hover:border-blue-300 transition-colors flex justify-between items-center group"
+                                            >
+                                                <span className="font-bold text-gray-700">{ref}</span>
+                                                <Printer size={16} className="text-gray-400 group-hover:text-blue-500" />
+                                            </button>
+                                        ))}
+                                        <button onClick={() => setShowPrintModal(false)} className="w-full mt-2 p-2 text-gray-500 hover:text-gray-700">Cancel</button>
+                                    </div>
+                                </Modal>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                                <Package size={64} className="mb-4 opacity-20" />
+                                <p>Select a part or scan a box to view details.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const WarningToSirius = ({ parts, setParts }) => {
+            const lowStockParts = parts.filter(p => {
+                const targetValue = Math.round((Number(p.qtyStock || 0) * Number(p.targetPercent || 0)) / 100);
+                return p.current < targetValue;
+            });
+            const sortedParts = [...lowStockParts].sort((a, b) => {
+                // 1. Priority Order: Urgent first
+                if (a.isUrgent && !b.isUrgent) return -1;
+                if (!a.isUrgent && b.isUrgent) return 1;
+
+                // 2. Time Order: Newest First
+                const timeA = new Date(a.lastUpdate || 0).getTime();
+                const timeB = new Date(b.lastUpdate || 0).getTime();
+                if (timeA !== timeB) return timeB - timeA;
+
+                return 0;
+            });
+
+            const toggleUrgent = (part) => {
+                // Node-RED: POST /api/toggle-urgent { partId: ... }
+                const partIndex = parts.findIndex(p => p.id === part.id);
+                if (partIndex === -1) return;
+
+                const updatedParts = [...parts];
+                updatedParts[partIndex] = { ...part, isUrgent: !part.isUrgent, lastUpdate: new Date().toISOString() };
+                setParts(updatedParts);
+            };
+
+            const updateReorderStatus = (partId, newStatus) => {
+                setParts(prev => prev.map(p => p.id === partId ? { ...p, reorderStatus: newStatus, lastUpdate: new Date().toISOString() } : p));
+            };
+
+            const getStatusBadge = (part) => {
+                const status = part.reorderStatus || 'ได้รับคำสั่งแล้ว';
+                const colors = {
+                    'ได้รับคำสั่งแล้ว': 'bg-blue-100 text-blue-800 border-blue-200',
+                    'กำลังเตรียม': 'bg-orange-100 text-orange-800 border-orange-200',
+                    'กำลังจัดส่ง': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+                    'จัดส่งแล้ว': 'bg-green-100 text-green-800 border-green-200'
+                };
+                const statuses = ['ได้รับคำสั่งแล้ว', 'กำลังเตรียม', 'กำลังจัดส่ง', 'จัดส่งแล้ว'];
+
+                const cycleStatus = () => {
+                    const idx = statuses.indexOf(status);
+                    const next = statuses[(idx + 1) % statuses.length];
+                    updateReorderStatus(part.id, next);
+                };
+
+                return (
+                    <span
+                        onClick={cycleStatus}
+                        className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer select-none transition-all active:scale-95 ${colors[status] || 'bg-gray-100 text-gray-800 border-gray-200'}`}
+                    >
+                        {status}
+                    </span>
+                );
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto">
+                    <div className="bg-red-600 text-white p-6 rounded-t-lg shadow-lg flex justify-between items-center">
+                        <h2 className="text-2xl font-bold flex items-center"><AlertTriangle className="mr-3" />Reorder List</h2>
+                        <div className="text-sm bg-red-700 px-3 py-1 rounded">
+                            Total Items: {sortedParts.length}
+                        </div>
+                    </div>
+
+                    <div className="bg-white shadow-md rounded-b-lg overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-100 border-b">
+                                <tr>
+                                    <th className="p-4">Last Update</th>
+                                    <th className="p-4">Priority</th>
+                                    <th className="p-4">Part No.</th>
+                                    <th className="p-4 text-center">Stock Level</th>
+                                    <th className="p-4 text-center">Status</th>
+                                    <th className="p-4 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {sortedParts.length === 0 ? (
+                                    <tr><td colSpan="6" className="p-8 text-center text-gray-500">All stock levels are healthy! Good job.</td></tr>
+                                ) : sortedParts.map(part => {
+                                    const targetValue = Math.round((Number(part.qtyStock || 0) * Number(part.targetPercent || 0)) / 100);
+                                    const percentage = Math.round((part.current / (targetValue || 1)) * 100);
+                                    const lastUpdateDate = part.lastUpdate ? new Date(part.lastUpdate) : null;
+                                    const lastUpdateTime = lastUpdateDate ? `${lastUpdateDate.toLocaleDateString()} ${lastUpdateDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '-';
+
+                                    return (
+                                        <tr key={part.id} className={`hover:bg-red-50 transition-colors ${part.isUrgent ? 'bg-red-50' : ''}`}>
+                                            <td className="p-4 text-xs text-gray-400 font-mono">
+                                                {lastUpdateTime}
+                                            </td>
+                                            <td className="p-4">
+                                                {part.isUrgent ? (
+                                                    <span className="flex items-center text-red-600 font-bold animate-pulse">
+                                                        <AlertTriangle size={16} className="mr-1" /> URGENT
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400">NORMAL</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 font-bold text-gray-800">{part.partNo}</td>
+                                            <td className="p-4 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <span className={`text-lg font-bold ${percentage < 25 ? 'text-red-600' : 'text-orange-600'}`}>{part.current}</span>
+                                                    <span className="text-[10px] text-gray-400 uppercase">Target: {targetValue}</span>
+                                                    <div className="w-24 h-1 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                                                        <div className={`h-full ${percentage < 25 ? 'bg-red-500' : 'bg-orange-500'}`} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center leading-none">
+                                                {getStatusBadge(part)}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <button
+                                                    onClick={() => toggleUrgent(part)}
+                                                    className={`px-4 py-2 rounded text-sm font-medium transition-colors ${part.isUrgent
+                                                        ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                        }`}
+                                                >
+                                                    {part.isUrgent ? 'Set Normal' : 'Make Urgent'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [parts, setParts] = useState([]);
+            const [scanHistory, setScanHistory] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            const isDuplicateImport = (refId) => scanHistory.includes(refId);
+            const recordScan = (refId) => setScanHistory(prev => [refId, ...prev].slice(0, 100)); // Keep last 100
+
+            const seedData = () => {
+                const demo = [
+                    { id: '1', partNo: '2450616-T', partName: 'Seat Cover A', qtyStock: 500, targetPercent: 30, current: 450, qtyPerBox: 80, boxes: [], lastUpdate: new Date().toISOString() },
+                    { id: '2', partNo: '2450617-T', partName: 'Seat Cover B', qtyStock: 300, targetPercent: 40, current: 50, qtyPerBox: 50, boxes: [], lastUpdate: new Date().toISOString() },
+                    { id: '3', partNo: 'M12345-X', partName: 'Bolt 12mm', qtyStock: 2000, targetPercent: 20, current: 1800, qtyPerBox: 200, boxes: [], lastUpdate: new Date().toISOString() },
+                ];
+                setParts(demo);
+            };
+
+            // Initial Data Load
+            useEffect(() => {
+                // Simulate loading delay or API fetch
+                setTimeout(() => {
+                    const loadedParts = DB.getParts();
+                    const loadedHistory = DB.getHistory();
+                    setParts(loadedParts);
+                    setScanHistory(loadedHistory);
+                    setLoading(false);
+                }, 500);
+            }, []);
+
+            // Auto-save whenever parts change (For LocalStorage Mode)
+            useEffect(() => {
+                if (!loading) {
+                    DB.saveParts(parts);
+                }
+            }, [parts, loading]);
+
+            useEffect(() => {
+                const handleHashChange = () => {
+                    const hash = window.location.hash.replace('#', '');
+                    if (['dashboard', 'stock', 'in', 'out', 'reorder'].includes(hash)) {
+                        setActiveTab(hash === 'stock' ? 'dashboard' : hash);
+                    } else if (hash === '') {
+                        window.location.hash = '#stock';
+                    }
+                };
+                window.addEventListener('hashchange', handleHashChange);
+                handleHashChange();
+                return () => window.removeEventListener('hashchange', handleHashChange);
+            }, []);
+
+            // Auto-save scan history
+            useEffect(() => {
+                if (!loading) {
+                    DB.saveHistory(scanHistory);
+                }
+            }, [scanHistory, loading]);
+
+            // --- Sub-Components/Pages ---
+
+
+
+
+
+            // Main Render
+            if (loading) return <div className="flex h-screen items-center justify-center text-blue-600 font-bold">Loading System...</div>;
+
+            return (
+                <div className="min-h-screen bg-gray-100 font-sans text-gray-800">
+                    <nav className="bg-white text-gray-800 shadow-md sticky top-0 z-40 no-print border-b">
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="flex justify-between h-16 items-center">
+                                <div className="flex items-center space-x-2">
+                                    <img src="https://github.com/hirunnon/Mockup/blob/main/logo_adient.png?raw=true" className="h-10 w-auto" alt="Adient Logo" />
+                                    <span className="font-bold text-lg tracking-wide hidden sm:block">WMS (Local)</span>
+                                </div>
+                                <div className="flex space-x-1 overflow-x-auto">
+                                    <button onClick={() => window.location.hash = '#stock'} className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                        <LayoutGrid size={18} /> <span className="hidden md:inline">Inventory</span>
+                                    </button>
+                                    <button onClick={() => window.location.hash = '#in'} className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded transition-colors ${activeTab === 'in' ? 'bg-green-50 text-green-600 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                        <ArrowDownCircle size={18} /> <span className="hidden md:inline">Stock In</span>
+                                    </button>
+                                    <button onClick={() => window.location.hash = '#out'} className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded transition-colors ${activeTab === 'out' ? 'bg-orange-50 text-orange-600 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                        <ArrowUpCircle size={18} /> <span className="hidden md:inline">Stock Out</span>
+                                    </button>
+                                    <button onClick={() => window.location.hash = '#reorder'} className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded transition-colors ${activeTab === 'reorder' ? 'bg-red-50 text-red-600 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                        <AlertTriangle size={18} /> <span className="hidden md:inline">Reorder List</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto p-4 md:p-6 no-print">
+                        {activeTab === 'dashboard' && <Dashboard parts={parts} setParts={setParts} seedData={seedData} />}
+                        {activeTab === 'in' && <StockIn parts={parts} setParts={setParts} recordScan={recordScan} isDuplicateImport={isDuplicateImport} />}
+                        {activeTab === 'out' && <StockOut parts={parts} setParts={setParts} />}
+                        {activeTab === 'reorder' && <WarningToSirius parts={parts} setParts={setParts} />}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
