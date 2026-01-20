@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factory Inventory Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0;
+            overflow: hidden; /* Prevent scroll on TV screen */
+        }
+
+        /* Scrollbar customization */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+
+        .grid-cell {
+            transition: all 0.2s ease-in-out;
+            aspect-ratio: 1 / 1; /* Keep cells square */
+        }
+        
+        /* Highlight Animation for Seq #1 */
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.8); } /* Yellow-400 */
+            70% { box-shadow: 0 0 0 12px rgba(250, 204, 21, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
+        
+        /* Standard Highlight (dimmed others) */
+        .highlight-active {
+            opacity: 1 !important;
+            z-index: 10;
+        }
+
+        /* Special Emphasis for Sequence #1 */
+        .seq-one-active {
+            border-color: #facc15 !important; /* Yellow 400 */
+            border-width: 3px !important;
+            transform: scale(1.15);
+            z-index: 30;
+            animation: pulse-ring 1.5s infinite;
+            box-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
+        }
+
+        .edit-mode-active .grid-cell:not(.invisible):hover {
+            cursor: pointer;
+            border-color: #f472b6; /* Pink 400 */
+            border-width: 2px;
+            transform: scale(1.1);
+            z-index: 15;
+        }
+        
+        .view-mode-active .grid-cell-occupied:hover {
+            cursor: default;
+            opacity: 1;
+            transform: scale(1.15);
+            z-index: 25;
+            border-color: #60a5fa; /* Blue 400 */
+        }
+
+        /* Responsive Text Sizing */
+        .cell-id { font-size: 10px; }
+        
+        @media (min-width: 1600px) {
+            .cell-id { font-size: 12px; }
+        }
+
+        /* Tooltip Styles */
+        #hover-tooltip {
+            pointer-events: none;
+            transition: opacity 0.1s, transform 0.1s;
+            background-color: rgba(15, 23, 42, 0.85); 
+            backdrop-filter: blur(8px); 
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* Sequence Badge Styles */
+        .seq-badge {
+            position: absolute;
+            background-color: #facc15; /* Yellow 400 */
+            color: #000;
+            font-weight: 800;
+            border-radius: 9999px;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            z-index: 40;
+            border: 1px solid #1e293b;
+        }
+        
+        /* Position variations */
+        .badge-top { top: -22px; left: 50%; transform: translateX(-50%); }
+        .badge-bottom { bottom: -22px; left: 50%; transform: translateX(-50%); }
+        
+        /* Connector line for badge */
+        .seq-line {
+            position: absolute;
+            width: 1px;
+            height: 8px;
+            background-color: #facc15;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 39;
+        }
+        .line-top { top: -8px; }
+        .line-bottom { bottom: -8px; }
+
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Tooltip Element -->
+    <div id="hover-tooltip" class="fixed hidden z-[100] rounded-xl p-4 w-60 text-sm">
+        <div id="tt-part" class="font-bold text-white text-lg mb-2 border-b border-slate-500/50 pb-1 truncate drop-shadow-md">Part Name</div>
+        <div class="grid grid-cols-3 gap-y-2 text-xs items-center">
+            
+            <div class="text-slate-300 font-semibold col-span-1">Loc:</div>
+            <div id="tt-loc" class="text-right text-blue-300 font-extrabold text-base col-span-2 drop-shadow-sm">W-01</div>
+
+            <div class="text-slate-300 font-semibold col-span-1">Seq:</div>
+            <div id="tt-seq" class="text-right text-yellow-400 font-extrabold text-base col-span-2 drop-shadow-sm">#1</div>
+            
+            <div class="text-slate-300 font-semibold col-span-1">Qty:</div>
+            <div id="tt-qty" class="text-right text-green-400 font-bold font-mono text-sm col-span-2 drop-shadow-sm">100 ea</div>
+            
+            <div class="text-slate-300 font-semibold col-span-1">Time:</div>
+            <div id="tt-date" class="text-right text-slate-100 font-medium col-span-2 text-[11px] drop-shadow-sm">2026-01-01 12:00</div>
+        </div>
+    </div>
+
+    <!-- Main Map Area -->
+    <main class="flex-1 bg-slate-900 relative flex flex-col overflow-hidden p-4">
+        
+        <!-- DASHBOARD OVERLAY -->
+        <div id="dashboard-overlay" class="absolute top-6 left-6 z-40 w-[35%] bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl shadow-2xl p-4 flex flex-col gap-4">
+            
+            <!-- Header Title -->
+            <div class="flex justify-between items-start border-b border-slate-600 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 p-2 rounded-lg shadow-lg">
+                        <i class="fa-solid fa-warehouse text-xl text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white tracking-wide leading-tight">INVENTORY MAP</h1>
+                        <p class="text-slate-400 text-xs">Zone A: Finished Goods (FG)</p>
+                    </div>
+                </div>
+                
+                <!-- Edit Mode Toggle -->
+                <button id="btn-mode" onclick="toggleEditMode()" class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 transition text-white text-xs font-bold flex items-center gap-2 border border-slate-600">
+                    <i class="fa-solid fa-eye"></i>
+                    <span id="mode-text">VIEW ONLY</span>
+                </button>
+            </div>
+
+            <!-- KPI Stats -->
+            <div class="grid grid-cols-4 gap-2">
+                <div class="bg-slate-900/50 p-2 rounded border border-slate-700 text-center">
+                    <div class="text-slate-500 text-[10px] uppercase font-bold">Total</div>
+                    <div class="text-xl font-bold text-white" id="stat-total">179</div>
+                </div>
+                <div class="bg-slate-900/50 p-2 rounded border border-slate-700 text-center">
+                    <div class="text-slate-500 text-[10px] uppercase font-bold">Occupied</div>
+                    <div class="text-xl font-bold text-blue-400" id="stat-occupied">79</div>
+                </div>
+                <div class="bg-slate-900/50 p-2 rounded border border-slate-700 text-center">
+                    <div class="text-slate-500 text-[10px] uppercase font-bold">Free</div>
+                    <div class="text-xl font-bold text-green-400" id="stat-free">100</div>
+                </div>
+                <div class="bg-slate-900/50 p-2 rounded border border-slate-700 text-center flex flex-col justify-center items-center">
+                    <div class="text-slate-500 text-[10px] uppercase font-bold">Util %</div>
+                    <div class="text-xl font-bold text-yellow-400 leading-none" id="stat-percent">44%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="absolute top-6 right-6 flex gap-4 text-xs font-semibold text-slate-300 bg-slate-800/80 backdrop-blur border border-slate-600 py-2 rounded-lg px-4 shadow-xl z-30">
+            <div class="flex items-center gap-2"><div class="w-3 h-3 bg-slate-800 border border-slate-600 rounded"></div> Empty</div>
+            <div class="flex items-center gap-2"><div class="w-3 h-3 bg-blue-600/60 border border-blue-400 rounded"></div> FG</div>
+            <div class="flex items-center gap-2"><div class="w-3 h-3 bg-slate-700 border-2 border-yellow-400 rounded"></div> Selected</div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="flex-1 overflow-hidden flex justify-center items-center">
+            <div id="warehouse-grid" class="grid gap-1 w-full max-w-full h-full view-mode-active transition-all duration-300 content-center">
+                <!-- Grid Items injected here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Bar: Part List -->
+    <footer class="h-40 bg-slate-800 border-t border-slate-700 shrink-0 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] z-50">
+        <div class="px-4 py-2 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
+            <h2 class="text-sm font-bold text-blue-400 flex items-center gap-2">
+                <i class="fa-solid fa-boxes-stacked"></i> Part Summary List
+            </h2>
+            
+            <!-- Play Button / Auto Cycle Toggle -->
+            <button id="btn-play" onclick="toggleAutoPlay()" class="flex items-center gap-2 px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition border border-slate-600">
+                <i id="icon-play" class="fa-solid fa-play"></i>
+                <span id="text-play">AUTO PLAY</span>
+            </button>
+        </div>
+        
+        <div id="part-list" class="flex-1 overflow-x-auto overflow-y-hidden flex items-center px-4 gap-3 py-2 scroll-smooth">
+            <!-- Part Items injected here -->
+        </div>
+    </footer>
+
+    <!-- Modal: Edit Only -->
+    <div id="modal" class="fixed inset-0 bg-slate-900/90 hidden z-[60] flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl w-[600px] transform transition-all scale-100 overflow-hidden">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-800 to-slate-700 px-8 py-5 border-b border-slate-600 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-500/20 p-2 rounded text-blue-400"><i class="fa-solid fa-location-dot text-xl"></i></div>
+                    <h3 class="text-3xl font-bold text-white">Location: <span id="modal-title" class="text-blue-400">W-01</span></h3>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white transition hover:rotate-90 duration-200"><i class="fa-solid fa-xmark text-3xl"></i></button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-8 space-y-6">
+                <!-- Edit Mode Form -->
+                <form id="modal-edit-form" class="hidden space-y-5" onsubmit="saveData(event)">
+                    <div>
+                        <label class="block text-slate-300 mb-2 font-semibold">Part Name / Model</label>
+                        <input type="text" id="edit-part-name" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-4 text-white text-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="e.g. Model-X-123">
+                    </div>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div>
+                            <label class="block text-slate-300 mb-2 font-semibold">Quantity (ea)</label>
+                            <input type="number" id="edit-qty" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-4 text-white text-lg focus:border-blue-500 outline-none transition" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-slate-300 mb-2 font-semibold">Date/Time</label>
+                            <input type="datetime-local" id="edit-date" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-4 text-white text-sm focus:border-blue-500 outline-none transition">
+                        </div>
+                    </div>
+                    
+                    <div class="pt-6 flex gap-4 border-t border-slate-700/50 mt-4">
+                        <button type="button" onclick="clearLocationData()" class="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-3 rounded-lg border border-red-500/30 transition font-semibold">Clear Spot</button>
+                        <button type="submit" class="flex-[2] bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold text-lg shadow-lg shadow-blue-900/50 transition transform hover:-translate-y-0.5">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-10 right-10 bg-green-500 text-white px-8 py-4 rounded-xl shadow-2xl transform -translate-y-40 transition-all duration-500 flex items-center gap-3 z-[70]">
+        <i class="fa-solid fa-circle-check text-2xl"></i>
+        <span class="font-bold text-lg">Update Saved Successfully!</span>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION: LAYOUT MAP ---
+        
+        const TOTAL_SPOTS = 179;
+        const COLS_LEFT = 15;
+        const COLS_GAP = 2;
+        const COLS_RIGHT = 17;
+        const GRID_COLUMNS = COLS_LEFT + COLS_GAP + COLS_RIGHT; // 34
+
+        let mapLayoutConfig = [];
+
+        function addRow(leftStart, leftCount, rightStart, rightCount) {
+            if (leftStart) {
+                for(let i=0; i<COLS_LEFT; i++) {
+                    if (i < leftCount) mapLayoutConfig.push(leftStart + i);
+                    else mapLayoutConfig.push(null);
+                }
+            } else {
+                for(let i=0; i<COLS_LEFT; i++) mapLayoutConfig.push(null);
+            }
+            for(let i=0; i<COLS_GAP; i++) mapLayoutConfig.push(null);
+            if (rightStart) {
+                for(let i=0; i<COLS_RIGHT; i++) {
+                    if (i < rightCount) mapLayoutConfig.push(rightStart + i);
+                    else mapLayoutConfig.push(null);
+                }
+            } else {
+                for(let i=0; i<COLS_RIGHT; i++) mapLayoutConfig.push(null);
+            }
+        }
+
+        // Add 2 Rows of Gaps (to increase aisle distance)
+        function addGapRow() {
+            for(let k=0; k<2; k++) { // Loop 2 times
+                for(let i=0; i<GRID_COLUMNS; i++) mapLayoutConfig.push(null);
+            }
+        }
+
+        // --- DEFINING ROWS ---
+        // Row 1
+        addRow(null, 0, 61, 17);
+        // Row 2
+        addRow(null, 0, 78, 17);
+        
+        // Gap Row 2-3
+        addGapRow();
+
+        // Row 3
+        addRow(null, 0, 95, 17);
+        
+        // Row 4
+        addRow(1, 15, 112, 17);
+        
+        // Gap Row 4-5
+        addGapRow();
+
+        // Row 5
+        addRow(16, 15, 129, 17);
+        // Row 6
+        addRow(31, 15, 146, 17);
+        
+        // Gap Row 6-7
+        addGapRow();
+
+        // Row 7
+        addRow(46, 15, 163, 17);
+
+        // --- 2. STATE & MOCK DATA ---
+        const MOCK_PARTS = ['PUMP-DX-200', 'VALVE-HYD-50', 'GEAR-SET-A', 'MOTOR-SERVO-X', 'HOUSING-ALU-B', 'ELEC-CTRL-V2', 'SENSOR-PRO-99', 'BEARING-CERAMIC'];
+        let isEditMode = false;
+        let selectedPartFilter = null;
+        let inventoryData = [];
+        let globalSequenceMap = {}; 
+        
+        // Auto Play State
+        let isAutoPlay = false;
+        let autoPlayTimer = null;
+        let autoPlayStep = 'overview'; 
+        let autoPlayIndex = -1;
+
+        // --- 3. INITIALIZATION ---
+        function init() {
+            const grid = document.getElementById('warehouse-grid');
+            grid.style.gridTemplateColumns = `repeat(${GRID_COLUMNS}, minmax(0, 1fr))`;
+
+            generateMockData();
+            calculateSequences();
+            renderMap();
+            renderStats();
+            renderSidebar();
+        }
+
+        function generateMockData() {
+            const now = new Date();
+            let occupiedCount = 0;
+            const targetOccupied = Math.floor(TOTAL_SPOTS * 0.44); 
+
+            for (let i = 1; i <= TOTAL_SPOTS; i++) {
+                inventoryData.push({ id: `W${i}`, partName: null, qty: 0, date: null });
+            }
+
+            while (occupiedCount < targetOccupied) {
+                const randIndex = Math.floor(Math.random() * TOTAL_SPOTS);
+                if (!inventoryData[randIndex].partName) {
+                    const randomPart = MOCK_PARTS[Math.floor(Math.random() * MOCK_PARTS.length)];
+                    const randomTime = new Date(now.getTime() - Math.floor(Math.random() * 10 * 24 * 60 * 60 * 1000));
+                    
+                    inventoryData[randIndex].partName = randomPart;
+                    inventoryData[randIndex].qty = Math.floor(Math.random() * 150) + 50;
+                    inventoryData[randIndex].date = randomTime.toISOString().slice(0, 19).replace('T', ' ');
+                    occupiedCount++;
+                }
+            }
+        }
+
+        function calculateSequences() {
+            globalSequenceMap = {};
+            
+            // Group by part
+            const groups = {};
+            inventoryData.forEach(item => {
+                if(item.partName) {
+                    if(!groups[item.partName]) groups[item.partName] = [];
+                    groups[item.partName].push(item);
+                }
+            });
+
+            // Sort each group by date and assign rank
+            Object.values(groups).forEach(group => {
+                group.sort((a, b) => new Date(a.date) - new Date(b.date));
+                group.forEach((item, index) => {
+                    globalSequenceMap[item.id] = index + 1;
+                });
+            });
+        }
+
+        // --- HELPER: LOGICAL ROW DETECTION ---
+        // Determines which "Warehouse Row" (1-7) a spot ID belongs to
+        function getLogicalRow(spotId) {
+            const id = parseInt(spotId.replace('W', ''));
+            
+            if (id >= 61 && id <= 77) return 1;
+            if (id >= 78 && id <= 94) return 2;
+            if (id >= 95 && id <= 111) return 3;
+            if ((id >= 1 && id <= 15) || (id >= 112 && id <= 128)) return 4;
+            if ((id >= 16 && id <= 30) || (id >= 129 && id <= 145)) return 5;
+            if ((id >= 31 && id <= 45) || (id >= 146 && id <= 162)) return 6;
+            if ((id >= 46 && id <= 60) || (id >= 163 && id <= 179)) return 7;
+            
+            return 0; // Unknown
+        }
+
+        // --- 4. RENDERING ---
+        function renderMap() {
+            const grid = document.getElementById('warehouse-grid');
+            grid.innerHTML = ''; 
+
+            mapLayoutConfig.forEach((spotNum) => {
+                const el = document.createElement('div');
+                
+                if (spotNum === null) {
+                    el.className = 'grid-cell invisible'; 
+                    grid.appendChild(el);
+                    return;
+                }
+
+                el.className = 'grid-cell rounded border font-mono relative flex flex-col items-center justify-center select-none overflow-visible';
+
+                const spotId = `W${spotNum}`;
+                const spotData = inventoryData.find(d => d.id === spotId);
+                
+                if (!spotData) return;
+
+                const hasItem = spotData.partName !== null;
+                const isSelectedPart = selectedPartFilter && spotData.partName === selectedPartFilter;
+                
+                // Mark element ID for easier lookup
+                el.id = `cell-${spotId}`;
+
+                // Base Style
+                if (hasItem) {
+                    el.classList.add('bg-blue-900/60', 'border-blue-500/50', 'grid-cell-occupied', 'shadow-sm');
+                    el.innerHTML = `
+                        <span class="text-blue-300 font-bold cell-id mb-0.5">${spotId}</span>
+                        <div class="w-4/5 h-1 bg-blue-500 rounded-full opacity-70"></div>
+                    `;
+                    // TOOLTIP LOGIC (Only if NOT Auto Play)
+                    el.onmouseenter = (e) => {
+                        if (!isAutoPlay) showTooltip(e, spotData, el);
+                    };
+                    el.onmouseleave = () => hideTooltip();
+                } else {
+                    el.classList.add('bg-slate-800/40', 'border-slate-700/50', 'text-slate-600');
+                    el.innerHTML = `<span class="font-semibold cell-id opacity-50">${spotId}</span>`;
+                }
+
+                el.onclick = () => handleSpotClick(spotId);
+
+                // SELECTION HIGHLIGHT LOGIC
+                if (isSelectedPart) {
+                    const seqNum = globalSequenceMap[spotId] || 0;
+                    
+                    el.classList.add('highlight-active'); // Dim others
+
+                    // Special emphasis for #1
+                    if (seqNum === 1) {
+                        el.classList.add('seq-one-active');
+                    }
+
+                    // BADGE RENDERING
+                    const row = getLogicalRow(spotId);
+                    let badgeClass = 'badge-top'; // Default
+                    let lineClass = 'line-top';
+                    
+                    // Logic: Row 1,3,5,7 -> Top | Row 2,4,6 -> Bottom
+                    if ([2, 4, 6].includes(row)) {
+                        badgeClass = 'badge-bottom';
+                        lineClass = 'line-bottom';
+                    }
+
+                    // Append Badge Element
+                    const badgeContainer = document.createElement('div');
+                    badgeContainer.innerHTML = `
+                        <div class="seq-line ${lineClass}"></div>
+                        <div class="seq-badge ${badgeClass}">${seqNum}</div>
+                    `;
+                    el.appendChild(badgeContainer);
+
+                } else if (selectedPartFilter) {
+                    el.classList.add('opacity-10'); // Dim non-selected
+                }
+
+                grid.appendChild(el);
+            });
+        }
+
+        // TOOLTIP FUNCTIONS
+        function showTooltip(e, data, el) {
+            if (isEditMode) return; 
+
+            const tt = document.getElementById('hover-tooltip');
+            const seq = globalSequenceMap[data.id] || '-';
+
+            document.getElementById('tt-part').innerText = data.partName;
+            document.getElementById('tt-loc').innerText = data.id; // Added Loc
+            document.getElementById('tt-seq').innerText = `#${seq}`;
+            document.getElementById('tt-qty').innerText = data.qty + " ea";
+            document.getElementById('tt-date').innerText = data.date || '-';
+
+            // Positioning Logic
+            const rect = el.getBoundingClientRect();
+            const ttWidth = 240; 
+            const ttHeight = tt.offsetHeight || 150; 
+            const padding = 20;
+
+            let top = rect.top - ttHeight - 10; 
+            let left = rect.left + (rect.width / 2) - (ttWidth / 2);
+
+            if (top < padding) top = rect.bottom + 10; 
+            if (left < padding) left = padding;
+            if (left + ttWidth > window.innerWidth - padding) left = window.innerWidth - ttWidth - padding;
+            if (top + ttHeight > window.innerHeight - padding) top = window.innerHeight - ttHeight - padding;
+            
+            tt.style.top = `${top}px`;
+            tt.style.left = `${left}px`;
+            tt.classList.remove('hidden');
+        }
+
+        function hideTooltip() {
+            document.getElementById('hover-tooltip').classList.add('hidden');
+        }
+
+        function renderStats() {
+            const occupiedCount = inventoryData.filter(i => i.partName).length;
+            const freeCount = TOTAL_SPOTS - occupiedCount;
+            const percent = ((occupiedCount / TOTAL_SPOTS) * 100).toFixed(0);
+
+            document.getElementById('stat-occupied').innerText = occupiedCount;
+            document.getElementById('stat-free').innerText = freeCount;
+            
+            const percentEl = document.getElementById('stat-percent');
+            percentEl.innerText = `${percent}%`;
+            
+            if (percent > 90) percentEl.className = 'text-xl font-bold text-red-500 leading-none';
+            else if (percent > 75) percentEl.className = 'text-xl font-bold text-yellow-400 leading-none';
+            else percentEl.className = 'text-xl font-bold text-green-400 leading-none';
+        }
+
+        function renderSidebar() {
+            const listContainer = document.getElementById('part-list');
+            listContainer.innerHTML = '';
+
+            const summary = {};
+            inventoryData.forEach(item => {
+                if (item.partName) {
+                    if (!summary[item.partName]) {
+                        summary[item.partName] = { count: 0, totalQty: 0 };
+                    }
+                    summary[item.partName].count++;
+                    summary[item.partName].totalQty += item.qty;
+                }
+            });
+
+            const sortedParts = Object.keys(summary).sort();
+
+            sortedParts.forEach((partName, idx) => {
+                const data = summary[partName];
+                const isActive = selectedPartFilter === partName;
+
+                const card = document.createElement('div');
+                card.id = `part-card-${idx}`; 
+                card.className = `min-w-[180px] h-full p-3 rounded-xl cursor-pointer transition-all duration-200 border flex flex-col justify-between ${isActive ? 'bg-blue-600 border-blue-400 shadow-lg scale-105' : 'bg-slate-700/50 border-slate-600 hover:bg-slate-700'}`;
+                card.onclick = () => {
+                    if(isAutoPlay) toggleAutoPlay();
+                    togglePartFilter(partName);
+                };
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="font-bold ${isActive ? 'text-white' : 'text-slate-200'} text-sm truncate w-full" title="${partName}">${partName}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                             <span class="${isActive ? 'bg-white text-blue-600' : 'bg-slate-600 text-slate-300'} text-[10px] px-1.5 py-0.5 rounded font-bold">${data.count} Pos</span>
+                        </div>
+                    </div>
+                    <div class="text-[10px] ${isActive ? 'text-blue-100' : 'text-slate-400'} text-right">
+                        Total: ${data.totalQty.toLocaleString()}
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        // --- 5. INTERACTION & UTILS ---
+        
+        function toggleEditMode() {
+            if (isAutoPlay) toggleAutoPlay();
+
+            isEditMode = !isEditMode;
+            const btn = document.getElementById('btn-mode');
+            const grid = document.getElementById('warehouse-grid');
+            
+            if (isEditMode) {
+                btn.classList.replace('bg-slate-700', 'bg-pink-600');
+                btn.classList.add('animate-pulse');
+                btn.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> EDIT`;
+                grid.classList.add('edit-mode-active');
+                grid.classList.remove('view-mode-active');
+                selectedPartFilter = null;
+                hideTooltip(); // Hide any stuck tooltips
+                renderMap();
+                renderSidebar();
+            } else {
+                btn.classList.replace('bg-pink-600', 'bg-slate-700');
+                btn.classList.remove('animate-pulse');
+                btn.innerHTML = `<i class="fa-solid fa-eye"></i> VIEW ONLY`;
+                grid.classList.remove('edit-mode-active');
+                grid.classList.add('view-mode-active');
+            }
+        }
+
+        function togglePartFilter(partName) {
+            hideTooltip(); // Clear previous
+            selectedPartFilter = (selectedPartFilter === partName) ? null : partName;
+            renderMap();
+            renderSidebar();
+        }
+
+        // --- AUTO PLAY LOGIC ---
+        function toggleAutoPlay() {
+            if (isEditMode) {
+                alert("Please switch to View Only mode first.");
+                return;
+            }
+
+            isAutoPlay = !isAutoPlay;
+            const btn = document.getElementById('btn-play');
+            const icon = document.getElementById('icon-play');
+            const text = document.getElementById('text-play');
+
+            if (isAutoPlay) {
+                btn.classList.replace('bg-slate-700', 'bg-green-600');
+                icon.className = 'fa-solid fa-stop';
+                text.innerText = 'STOP';
+                hideTooltip(); // Hide immediately on start
+                startAutoPlayLoop('overview');
+
+            } else {
+                btn.classList.replace('bg-green-600', 'bg-slate-700');
+                icon.className = 'fa-solid fa-play';
+                text.innerText = 'AUTO PLAY';
+                
+                clearTimeout(autoPlayTimer);
+                selectedPartFilter = null;
+                hideTooltip();
+                renderMap();
+                renderSidebar();
+            }
+        }
+
+        function startAutoPlayLoop(phase) {
+            if(!isAutoPlay) return;
+
+            if (phase === 'overview') {
+                selectedPartFilter = null;
+                renderMap();
+                renderSidebar();
+
+                autoPlayIndex = -1;
+                autoPlayTimer = setTimeout(() => {
+                    startAutoPlayLoop('cycling');
+                }, 10000);
+
+            } else if (phase === 'cycling') {
+                const uniqueParts = [...new Set(inventoryData.filter(i => i.partName).map(i => i.partName))].sort();
+                
+                autoPlayIndex++;
+
+                if (autoPlayIndex >= uniqueParts.length) {
+                    startAutoPlayLoop('overview');
+                    return;
+                }
+
+                const partName = uniqueParts[autoPlayIndex];
+                selectedPartFilter = partName;
+                
+                renderMap();
+                renderSidebar();
+                
+                // NO Tooltip in Auto Play anymore (Per Requirement)
+                // Just Highlight #1 (handled in renderMap via .seq-one-active)
+
+                const card = document.getElementById(`part-card-${autoPlayIndex}`);
+                if(card) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+
+                autoPlayTimer = setTimeout(() => {
+                    startAutoPlayLoop('cycling');
+                }, 3000);
+            }
+        }
+
+
+        let currentModalSpotId = null;
+
+        function handleSpotClick(spotId) {
+            if (!isEditMode) return; 
+            const spotData = inventoryData.find(i => i.id === spotId);
+            currentModalSpotId = spotId;
+            openEditModal(spotData);
+        }
+
+        function openEditModal(data) {
+            const m = document.getElementById('modal');
+            m.classList.remove('hidden');
+            setTimeout(() => m.classList.remove('opacity-0'), 10);
+
+            document.getElementById('modal-title').innerText = data.id + " [EDIT]";
+            document.getElementById('modal-edit-form').classList.remove('hidden');
+
+            document.getElementById('edit-part-name').value = data.partName || '';
+            document.getElementById('edit-qty').value = data.qty || '';
+            
+            if (data.date) {
+                const isoStr = data.date.replace(' ', 'T').substring(0, 16);
+                document.getElementById('edit-date').value = isoStr;
+            } else {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.getElementById('edit-date').value = now.toISOString().slice(0,16);
+            }
+        }
+
+        function closeModal() {
+            const m = document.getElementById('modal');
+            m.classList.add('opacity-0');
+            setTimeout(() => m.classList.add('hidden'), 300);
+            currentModalSpotId = null;
+        }
+
+        function saveData(e) {
+            e.preventDefault();
+            if (!currentModalSpotId) return;
+
+            const partName = document.getElementById('edit-part-name').value.trim();
+            const qty = parseInt(document.getElementById('edit-qty').value) || 0;
+            let dateStr = document.getElementById('edit-date').value;
+
+            if (dateStr) dateStr = dateStr.replace('T', ' ') + ':00';
+
+            const index = inventoryData.findIndex(i => i.id === currentModalSpotId);
+            if (index !== -1) {
+                inventoryData[index].partName = partName || null;
+                inventoryData[index].qty = partName ? qty : 0;
+                inventoryData[index].date = partName ? dateStr : null;
+            }
+
+            calculateSequences();
+            renderMap();
+            renderStats();
+            renderSidebar();
+            closeModal();
+            showToast();
+        }
+
+        function clearLocationData() {
+            document.getElementById('edit-part-name').value = '';
+            document.getElementById('edit-qty').value = '';
+        }
+
+        function showToast() {
+            const t = document.getElementById('toast');
+            t.classList.remove('-translate-y-40');
+            t.classList.add('translate-y-0');
+            setTimeout(() => {
+                t.classList.remove('translate-y-0');
+                t.classList.add('-translate-y-40');
+            }, 2500);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
