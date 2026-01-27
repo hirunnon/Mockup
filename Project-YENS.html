@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Yens: Smart Warehouse Workflow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50; /* สีน้ำเงินเข้ม */
+            --accent-color: #e67e22;  /* สีส้มเน้นจุดสำคัญ */
+            --bg-light: #f4f6f7;
+            --white: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Prompt', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-light);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--primary-color);
+            color: var(--white);
+            padding: 40px 0;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 5px solid var(--accent-color);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        /* Section Styling */
+        section {
+            background: var(--white);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        h2 {
+            color: var(--primary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 15px;
+            margin-top: 0;
+        }
+
+        /* Architecture Diagram Area */
+        .diagram-container {
+            text-align: center;
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px dashed #bdc3c7;
+            margin: 20px 0;
+        }
+
+        .diagram-img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+        }
+
+        /* Workflow Steps */
+        .step {
+            display: flex;
+            margin-bottom: 30px;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            background-color: var(--primary-color);
+            color: var(--white);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex-grow: 1;
+        }
+
+        .step-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        .step-img-placeholder {
+            width: 100%;
+            height: 200px;
+            background-color: #ddd;
+            margin-top: 15px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Hardware Spec Grid */
+        .hardware-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .hardware-card {
+            background: var(--bg-light);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .hardware-card h3 {
+            margin-top: 0;
+            font-size: 1.1rem;
+            color: var(--accent-color);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .step {
+                flex-direction: column;
+            }
+            .step-number {
+                margin-bottom: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="container">
+            <h1>Project "Yens" Smart Warehouse</h1>
+            <p>ระบบบริหารคลังสินค้ากึ่งอัตโนมัติ ด้วย Odoo Enterprise และ Industrial IoT</p>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <section>
+            <h2>1. ภาพรวมโครงสร้างระบบ (System Architecture)</h2>
+            <p>การเชื่อมต่อระหว่างระบบ ERP บน Cloud และอุปกรณ์ควบคุมในคลังสินค้า ผ่านเทคโนโลยีที่ปลอดภัยและเสถียร</p>
+            
+            <div class="diagram-container">
+                <img src="https://placehold.co/800x400/2c3e50/ffffff?text=System+Architecture+Diagram%0A(Odoo+Cloud+%3C-%3E+Cloudflare+Tunnel+%3C-%3E+Pi+5+%3C-%3E+Hardware)" alt="System Architecture" class="diagram-img">
+                <p><em>แผนภาพแสดงการเชื่อมต่อ: Odoo ส่งคำสั่งผ่าน Tunnel มายัง Raspberry Pi เพื่อควบคุม Hardware</em></p>
+            </div>
+            <ul>
+                <li><strong>Core System:</strong> Odoo 17 Enterprise (On Cloud)</li>
+                <li><strong>Connectivity:</strong> Cloudflare Tunnel (Secure Link) + MQTT Protocol</li>
+                <li><strong>Controller:</strong> Raspberry Pi 5 (8GB/16GB) + NVMe SSD</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>2. ขั้นตอนการทำงาน (Operational Workflow)</h2>
+
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <div class="step-title">Order & Payment (จุดเริ่มต้น)</div>
+                    <p>พนักงานเปิด Invoice ในระบบ Odoo ระบบจะสร้าง <strong>Dynamic QR Code</strong> บนใบแจ้งหนี้อัตโนมัติ เมื่อบัญชียืนยันยอดเงิน (Reconcile) สถานะคำสั่งซื้อจะเปลี่ยนเป็น "Ready to Pick"</p>
+                    <img src="https://placehold.co/600x200/e67e22/ffffff?text=Step+1:+Odoo+Invoice+%26+QR+Code" alt="Step 1" class="step-img-placeholder">
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <div class="step-title">Command Dispatch (ส่งคำสั่ง)</div>
+                    <p>Odoo ส่งคำสั่งผ่าน <strong>MQTT</strong> วิ่งผ่าน Cloudflare Tunnel ลงมาที่โกดังขอนแก่น Raspberry Pi 5 รับคำสั่งและประมวลผลด้วย <strong>Node-RED</strong> ทันที (Latency ต่ำมาก)</p>
+                    <img src="https://placehold.co/600x200/2980b9/ffffff?text=Step+2:+Data+Transmission+(Cloud+to+Pi)" alt="Step 2" class="step-img-placeholder">
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <div class="step-title">Execution (จ่ายสินค้าอัตโนมัติ)</div>
+                    <p>Node-RED สั่งงาน Hardware ตามประเภทสินค้า:</p>
+                    <ul>
+                        <li><strong>สินค้าชิ้นเล็ก:</strong> สั่ง Solenoid เปิดล็อก -> สินค้าไหลลงราง (Gravity Chute)</li>
+                        <li><strong>สินค้าหนัก:</strong> สั่ง Relay ขับสายพาน MDR -> ลำเลียงสินค้าออกมา</li>
+                    </ul>
+                    <img src="https://placehold.co/600x200/27ae60/ffffff?text=Step+3:+Conveyor+%26+Solenoid+Action" alt="Step 3" class="step-img-placeholder">
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <div class="step-title">Packing & Validation (จบงาน)</div>
+                    <p>สินค้าไหลมารวมที่จุดแพ็ค หน้าจอ Kiosk แสดงรายการ พนักงานตรวจสอบและ <strong>สแกนบัตร (Badge)</strong> เพื่อยืนยัน ระบบส่ง XML-RPC กลับไปตัดสต็อกใน Odoo ทันที</p>
+                    <img src="https://placehold.co/600x200/8e44ad/ffffff?text=Step+4:+Badge+Scan+%26+Stock+Update" alt="Step 4" class="step-img-placeholder">
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>3. สเปกอุปกรณ์หลัก (Hardware Specifications)</h2>
+            <div class="hardware-grid">
+                <div class="hardware-card">
+                    <h3>Main Controller</h3>
+                    <p><strong>Raspberry Pi 5 (Model B)</strong></p>
+                    <ul>
+                        <li>RAM: 16GB (High Performance)</li>
+                        <li>Storage: 256GB NVMe SSD (Official)</li>
+                        <li>Cooling: Active Cooler</li>
+                    </ul>
+                </div>
+                <div class="hardware-card">
+                    <h3>Connectivity</h3>
+                    <p><strong>Network & IoT</strong></p>
+                    <ul>
+                        <li>Gigabit Ethernet (Static IP)</li>
+                        <li>Cloudflare Tunnel (Zero Trust)</li>
+                        <li>MQTT Broker (Mosquitto)</li>
+                    </ul>
+                </div>
+                <div class="hardware-card">
+                    <h3>Automation Parts</h3>
+                    <p><strong>Control Modules</strong></p>
+                    <ul>
+                        <li>8-Channel Relay Module</li>
+                        <li>12V/24V Solenoid Locks</li>
+                        <li>Infrared Break Beam Sensors</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer>
+        <p>Prepared by TKK for Project "Yens" | © 2024</p>
+    </footer>
+
+</body>
+</html>
