@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Kanban Pro - C1/C2 Line System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slide-in-from-top-4 {
+            from {
+                transform: translateY(-1rem);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoom-in {
+            from {
+                transform: scale(0.95);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .animate-in {
+            animation-duration: 200ms;
+            animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .fade-in {
+            animation-name: fade-in;
+        }
+
+        .slide-in-from-top-4 {
+            animation-name: slide-in-from-top-4;
+        }
+
+        .zoom-in {
+            animation-name: zoom-in;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50">
+    <div id="app"></div>
+
+    <script>
+        // === DATA & STATE ===
+        const DB_KEY = 'sharp_ekanban_db';
+
+        const getDB = () => {
+            const data = localStorage.getItem(DB_KEY);
+            if (!data) {
+                const initial = {
+                    parts: [
+                        { id: '1', code: 'P001', name: 'Micro Controller Unit', category: 'Electronics', currentQty: 450, maxStock: 500, alertThreshold: 20, unit: 'pcs', location: 'A-101', modelTarget: 'MF55', groupType: 'Prep Support' },
+                        { id: '2', code: 'P002', name: 'Heat Sink 40x40', category: 'Hardware', currentQty: 250, maxStock: 300, alertThreshold: 30, unit: 'pcs', location: 'B-205', modelTarget: 'MF51', groupType: 'Single Assy' },
+                        { id: '3', code: 'P003', name: 'Power Cable 1.5m', category: 'Cables', currentQty: 80, maxStock: 100, alertThreshold: 25, unit: 'units', location: 'C-012', modelTarget: 'SF50', groupType: 'Prep Support' },
+                        { id: '4', code: 'P004', name: 'Capacitor 100uF', category: 'Electronics', currentQty: 1000, maxStock: 1000, alertThreshold: 15, unit: 'pcs', location: 'A-302', modelTarget: 'X502', groupType: 'Single Assy' },
+                        { id: '5', code: 'P005', name: 'Main Frame Chassis', category: 'Mechanical', currentQty: 15, maxStock: 20, alertThreshold: 50, unit: 'units', location: 'D-001', modelTarget: 'MF55', groupType: 'Prep Support' },
+                    ],
+                    orders: [
+                        { id: 'ord-001', orderNo: 'REQ-MF55-001', items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 1 }], status: 'PROD_ASSY', requestedBy: 'C2 Line Operator', createdAt: new Date(Date.now() - 3600000 * 5).toISOString(), targetModel: 'MF55' },
+                        { id: 'ord-002', orderNo: 'REQ-SF50-002', items: [{ partId: '3', quantity: 50 }], status: 'PART_CONTROL', requestedBy: 'C1 Line Lead', createdAt: new Date(Date.now() - 3600000).toISOString(), targetModel: 'SF50' }
+                    ],
+                    templates: [
+                        { id: 'tpl-1', name: 'Daily Run C1', targetModel: 'MF55', items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 2 }], updatedAt: new Date().toISOString() }
+                    ],
+                    withdrawalHistory: []
+                };
+                localStorage.setItem(DB_KEY, JSON.stringify(initial));
+                return initial;
+            }
+            return JSON.parse(data);
+        };
+        const saveDB = (db) => localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+        let state = {
+            view: 'inventory',
+            sidebarCollapsed: false,
+            parts: [],
+            orders: [],
+            templates: [],
+            withdrawalHistory: [],
+            partFormData: { code: '', name: '', category: '', currentQty: 0, maxStock: 0, alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support' },
+            templateFormData: { name: '', targetModel: '', items: [], searchTerm: '' },
+            modals: {
+                partForm: false,
+                partFormEditing: null,
+                partDeleteConfirm: false,
+                stockWarning: false,
+                stockWarningData: null,
+                templateForm: false,
+                templateFormEditing: null,
+                templateDeleteConfirm: false,
+                templateSubmitConfirm: false,
+                templateSubmitTarget: null,
+                templateStockErrors: [],
+                orderCancelConfirm: false,
+                orderCancelTarget: null
+            }
+        };
+
+        function init() {
+            const db = getDB();
+            state.parts = db.parts;
+            state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: db.parts.find(p => p.id === i.partId) })) }));
+            state.templates = db.templates;
+            state.withdrawalHistory = db.withdrawalHistory;
+            render();
+        }
+
+        // === API FUNCTIONS ===
+        function addPart(part) {
+            const db = getDB();
+            const newPart = { ...part, id: 'p' + Date.now() };
+            db.parts.push(newPart);
+            saveDB(db);
+            state.parts = db.parts;
+        }
+
+        function updatePart(id, updates) {
+            const db = getDB();
+            const idx = db.parts.findIndex(p => p.id === id);
+            if (idx >= 0) {
+                db.parts[idx] = { ...db.parts[idx], ...updates };
+                saveDB(db);
+                state.parts = db.parts;
+            }
+        }
+
+        function deletePart(id) {
+            const db = getDB();
+            db.parts = db.parts.filter(p => p.id !== id);
+            saveDB(db);
+            state.parts = db.parts;
+        }
+
+        function withdrawPart(partId, qty) {
+            const db = getDB();
+            const part = db.parts.find(p => p.id === partId);
+            if (part) {
+                part.currentQty -= qty;
+                db.withdrawalHistory.push({
+                    id: 'wh' + Date.now(),
+                    partName: part.name,
+                    partCode: part.code,
+                    quantity: qty,
+                    withdrawnBy: 'Production Lead',
+                    timestamp: new Date().toISOString(),
+                    status: 'SUCCESS'
+                });
+                saveDB(db);
+                state.parts = db.parts;
+                state.withdrawalHistory = db.withdrawalHistory;
+            }
+        }
+
+        function createOrder(name, items, targetModel) {
+            const db = getDB();
+            const orderNo = 'REQ-' + (targetModel || 'GEN') + '-' + String(db.orders.length + 1).padStart(3, '0');
+            const newOrder = {
+                id: 'ord' + Date.now(),
+                orderNo,
+                items: items,
+                status: 'PENDING',
+                requestedBy: 'System Administrator',
+                createdAt: new Date().toISOString(),
+                targetModel: targetModel || undefined
+            };
+            items.forEach(item => {
+                const part = db.parts.find(p => p.id === item.partId);
+                if (part) part.currentQty -= item.quantity;
+            });
+            db.orders.push(newOrder);
+            saveDB(db);
+            state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: db.parts.find(p => p.id === i.partId) })) }));
+            state.parts = db.parts;
+        }
+
+        function updateOrderStatus(orderId, newStatus) {
+            const db = getDB();
+            const order = db.orders.find(o => o.id === orderId);
+            if (order) {
+                if (newStatus === 'CANCELLED') order.previousStatus = order.status;
+                order.status = newStatus;
+                saveDB(db);
+                state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: state.parts.find(p => p.id === i.partId) })) }));
+            }
+        }
+
+        function saveTemplate(template) {
+            const db = getDB();
+            if (state.modals.templateFormEditing) {
+                const idx = db.templates.findIndex(t => t.id === state.modals.templateFormEditing);
+                if (idx >= 0) {
+                    db.templates[idx] = { ...db.templates[idx], ...template, updatedAt: new Date().toISOString() };
+                }
+            } else {
+                const newTpl = { ...template, id: 'tpl' + Date.now(), updatedAt: new Date().toISOString() };
+                db.templates.push(newTpl);
+            }
+            saveDB(db);
+            state.templates = db.templates;
+        }
+
+        function deleteTemplate(id) {
+            const db = getDB();
+            db.templates = db.templates.filter(t => t.id !== id);
+            saveDB(db);
+            state.templates = db.templates;
+        }
+
+        // === RENDER ===
+        function render() {
+            document.getElementById('app').innerHTML = `
+                <div class="flex h-screen bg-slate-50 overflow-hidden">
+                    ${renderSidebar()}
+                    ${renderMain()}
+                </div>
+                ${renderModals()}
+            `;
+        }
+
+        function renderSidebar() {
+            const menuItems = [
+                { id: 'inventory', label: 'Part Control (Stock)', icon: '📦' },
+                { id: 'single-withdrawal', label: 'Urgent Supply', icon: '⚡' },
+                { id: 'list-withdrawal', label: 'Prod. Master Plan', icon: '📋' },
+                { id: 'orders', label: 'Production Monitor', icon: '📺' },
+            ];
+            return `
+                <aside class="${state.sidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-white flex flex-col shadow-xl transition-all duration-300">
+                    <div class="p-4 flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'gap-3'} border-b border-slate-800 min-h-[88px]">
+                        <button onclick="toggleSidebar()" class="hover:scale-105 transition-transform focus:outline-none">
+                            <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shadow-lg">
+                                <img src="https://companieslogo.com/img/orig/6753.T-a0ba4ea8.png?t=1720244490" alt="Sharp" class="w-full h-full object-contain" />
+                            </div>
+                        </button>
+                        ${!state.sidebarCollapsed ? `
+                            <div><h1 class="text-xl font-bold"><span class="text-blue-400">E-</span>Kanban Pro</h1>
+                            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">C1/C2 Line System</p></div>
+                        ` : ''}
+                    </div>
+                    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+                        <ul class="space-y-2">
+                            ${menuItems.map(item => `
+                                <li><button onclick="switchView('${item.id}')" class="w-full flex items-center rounded-lg transition-all text-sm font-medium h-12 ${state.sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-4'} ${state.view === item.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}">
+                                    <span class="text-xl">${item.icon}</span>
+                                    ${!state.sidebarCollapsed ? `<span>${item.label}</span>` : ''}
+                                </button></li>
+                            `).join('')}
+                        </ul>
+                    </nav>
+                    <div class="p-4 border-t border-slate-800">
+                        <div class="bg-slate-800 rounded-lg p-2 flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'gap-3'}">
+                            <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold">AD</div>
+                            ${!state.sidebarCollapsed ? `<div><p class="text-sm font-medium">Production Lead</p><p class="text-[10px] text-slate-500 uppercase">System Administrator</p></div>` : ''}
+                        </div>
+                    </div>
+                </aside>
+            `;
+        }
+
+        function renderMain() {
+            const labels = { 'inventory': 'Part Control (Stock)', 'single-withdrawal': 'Urgent Supply', 'list-withdrawal': 'Prod. Master Plan', 'orders': 'Production Monitor' };
+            return `
+                <main class="flex-1 flex flex-col overflow-hidden">
+                    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+                        <h2 class="text-lg font-semibold text-slate-800">${labels[state.view]}</h2>
+                        <span class="text-xs font-medium text-slate-500 flex items-center gap-2">
+                            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>Live Line Feed
+                        </span>
+                    </header>
+                    <div class="flex-1 overflow-y-auto p-8 bg-slate-50/50"><div class="max-w-7xl mx-auto">${renderView()}</div></div>
+                </main>
+            `;
+        }
+
+        function renderView() {
+            if (state.view === 'inventory') return renderInventoryView();
+            if (state.view === 'single-withdrawal') return renderSingleWithdrawalView();
+            if (state.view === 'list-withdrawal') return renderListWithdrawalView();
+            if (state.view === 'orders') return renderOrdersView();
+            return '';
+        }
+
+        function renderInventoryView() {
+            const lowStock = state.parts.filter(p => p.currentQty < (p.maxStock * p.alertThreshold / 100));
+            return `
+                <div class="space-y-6">
+                    <div class="grid grid-cols-4 gap-6">
+                        ${[
+                    { label: 'Unique Parts', value: state.parts.length, icon: '📦', color: 'slate' },
+                    { label: 'Need Replenish', value: lowStock.length, icon: '⚠️', color: 'red' },
+                    { label: 'Line Efficiency', value: '98.2%', icon: '📊', color: 'blue' },
+                    { label: 'C1/C2 Targets', value: '15 Units', icon: '🎯', color: 'green' }
+                ].map(s => `
+                            <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                                <p class="text-${s.color}-400 text-[10px] font-bold uppercase tracking-wider">${s.label}</p>
+                                <p class="text-3xl font-bold text-${s.color}-600 mt-1">${s.value}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                            <div><h3 class="font-bold text-slate-800 text-lg">Inventory Status Monitor</h3>
+                            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Follow Prod. Master Schedule Plan</p></div>
+                            <div class="flex gap-4">
+                                <input type="text" placeholder="Search code/model..." class="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
+                                <button onclick="openPartModal()" class="bg-gradient-to-b from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-md flex items-center gap-2">
+                                    <span class="text-lg leading-none">+</span> Register New Part
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-white text-slate-400 text-[10px] uppercase tracking-widest border-b border-slate-100">
+                                    <tr>
+                                        <th class="px-6 py-4 font-bold">Model / Grp</th>
+                                        <th class="px-6 py-4 font-bold">Part Info</th>
+                                        <th class="px-6 py-4 font-bold">Current Qty</th>
+                                        <th class="px-6 py-4 font-bold">Status</th>
+                                        <th class="px-6 py-4 font-bold text-center">Location</th>
+                                        <th class="px-6 py-4 font-bold text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 bg-white">
+                                    ${state.parts.map(part => {
+                    const threshold = part.maxStock * part.alertThreshold / 100;
+                    const isLow = part.currentQty < threshold;
+                    const ratio = Math.min((part.currentQty / part.maxStock) * 100, 100);
+                    return `
+                                            <tr class="hover:bg-slate-50">
+                                                <td class="px-6 py-5"><div class="flex flex-col">
+                                                    <span class="text-sm font-bold text-blue-600">${part.modelTarget || 'ALL'}</span>
+                                                    <span class="text-[9px] text-slate-400 uppercase font-bold">${part.groupType}</span>
+                                                </div></td>
+                                                <td class="px-6 py-5"><div class="font-bold text-slate-800 text-sm">${part.name}</div>
+                                                <div class="text-[11px] text-slate-400">${part.code} • ${part.category}</div></td>
+                                                <td class="px-6 py-5"><div class="w-40">
+                                                    <div class="flex items-baseline gap-2">
+                                                        <span class="text-sm font-bold ${isLow ? 'text-red-600' : 'text-slate-800'}">${part.currentQty} ${part.unit}</span>
+                                                        <span class="text-[10px] text-slate-300">Max: ${part.maxStock}</span>
+                                                    </div>
+                                                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-1.5">
+                                                        <div class="h-full rounded-full ${isLow ? 'bg-red-500' : 'bg-green-500'}" style="width:${ratio}%"></div>
+                                                    </div>
+                                                    <div class="text-[9px] text-slate-400 text-right mt-1">Alert @ ${part.alertThreshold}% (${Math.round(threshold)} ${part.unit})</div>
+                                                </div></td>
+                                                <td class="px-6 py-5">
+                                                    <span class="px-3 py-1 ${isLow ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'} border text-[10px] font-bold rounded-full uppercase">${isLow ? 'REPLENISH' : 'STABLE'}</span>
+                                                </td>
+                                                <td class="px-6 py-5 text-center font-mono text-xs font-bold text-slate-500">${part.location}</td>
+                                                <td class="px-6 py-5 text-right">
+                                                    <button onclick="editPart('${part.id}')" class="text-slate-400 hover:text-blue-600 text-sm font-medium">Edit</button>
+                                                </td>
+                            </tr>
+                                        `;
+                }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSingleWithdrawalView() {
+            return `
+                <div class="space-y-6 max-w-4xl mx-auto">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="text-lg font-bold text-slate-800">Quick Withdrawal</h3>
+                            <p class="text-xs text-slate-500">Deduct stock for a single item immediately.</p>
+                        </div>
+                        <form onsubmit="handleQuickWithdrawal(event)" class="p-6">
+                            <div class="flex gap-4 items-end">
+                                <div class="flex-grow">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Select Part</label>
+                                    <select id="quickPart" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+                                        <option value="">Choose a part...</option>
+                                        ${state.parts.map(p => `<option value="${p.id}">${p.code} - ${p.name} (Stock: ${p.currentQty})</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="w-32">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Quantity</label>
+                                    <input type="number" id="quickQty" min="1" value="1" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-center" required />
+                                </div>
+                                <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md">Confirm</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                        <div class="px-6 py-4 border-b border-slate-100">
+                            <h3 class="font-bold text-slate-800">Withdrawal Logs</h3>
+                            <p class="text-xs text-slate-500">History of urgent supply requests</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase">
+                                    <tr>${['Timestamp', 'Part Info', 'Quantity', 'Requested By', 'Status'].map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    ${state.withdrawalHistory.map(r => `
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="px-6 py-3 text-xs text-slate-500 font-mono">${new Date(r.timestamp).toLocaleString()}</td>
+                                            <td class="px-6 py-3"><div class="text-sm font-bold text-slate-700">${r.partName}</div><div class="text-[10px] text-slate-400">${r.partCode}</div></td>
+                                            <td class="px-6 py-3"><span class="bg-slate-100 px-2 py-1 rounded text-xs font-bold font-mono">-${r.quantity}</span></td>
+                                            <td class="px-6 py-3 text-xs text-slate-600">${r.withdrawnBy}</td>
+                                            <td class="px-6 py-3"><span class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full uppercase">${r.status}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderListWithdrawalView() {
+            return `
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <div><h3 class="text-2xl font-bold text-slate-800">Production Master Plan</h3>
+                        <p class="text-slate-500 text-sm">Manage withdrawal templates (BOM) for daily production.</p></div>
+                        <button onclick="openTemplateModal()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2">
+                            <span>+</span> Create New Template
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase border-b border-slate-100">
+                                <tr>${['Template Name', 'Target Model', 'Total Items', 'Last Updated', 'Actions'].map(h => `<th class="px-6 py-4 font-bold">${h}</th>`).join('')}</tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                ${state.templates.map(tpl => `
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="px-6 py-4"><span class="font-bold text-slate-800">${tpl.name}</span></td>
+                                        <td class="px-6 py-4"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-bold border border-blue-100">${tpl.targetModel}</span></td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">${tpl.items.length} Parts</td>
+                                        <td class="px-6 py-4 text-xs text-slate-400">${new Date(tpl.updatedAt).toLocaleDateString()}</td>
+                                        <td class="px-6 py-4"><div class="flex gap-2 justify-end">
+                                            <button onclick="editTemplate('${tpl.id}')" class="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded text-xs font-bold border border-slate-200">Edit</button>
+                                            <button onclick="submitTemplate('${tpl.id}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold shadow-md">Submit</button>
+                                        </div></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderOrdersView() {
+            const stages = [{ id: 'PART_CONTROL', label: 'Control' }, { id: 'PART_SUPPLY', label: 'Supply' }, { id: 'PROD_ASSY', label: 'Assy' }, { id: 'AGING', label: 'Aging' }, { id: 'FINAL', label: 'Final' }, { id: 'COMPLETED', label: 'Completed' }];
+            return `
+                <div class="space-y-6">
+                    <div><h3 class="text-xl font-bold text-slate-800">Follow Prod. Master Schedule Plan</h3>
+                    <p class="text-sm text-slate-500">Real-time status of line target installation</p></div>
+                    <div class="grid gap-6">
+                        ${state.orders.map(order => {
+                const isCancelled = order.status === 'CANCELLED';
+                const activeStatus = isCancelled ? order.previousStatus : order.status;
+                return `
+                                <div class="bg-white rounded-2xl shadow-sm border ${isCancelled ? 'border-red-100 opacity-90' : 'border-slate-200'}">
+                                    <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+                                        <div class="flex items-center gap-4">
+                                            <div class="px-3 py-1 rounded text-xs font-bold ${isCancelled ? 'bg-slate-200 text-slate-500' : 'bg-blue-600 text-white'}">${order.targetModel || 'N/A'}</div>
+                                            <div><h4 class="font-bold ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-800'}">${order.orderNo}</h4>
+                                            <p class="text-[10px] text-slate-400 uppercase">${order.requestedBy}</p></div>
+                                        </div>
+                                        <div class="flex-1 max-w-2xl px-8 hidden md:block">
+                                            <div class="relative flex justify-between">
+                                                <div class="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2"></div>
+                                                ${stages.map((stage, idx) => {
+                    const isActive = activeStatus === stage.id;
+                    const currentIdx = stages.findIndex(s => s.id === activeStatus);
+                    const isPast = currentIdx > idx;
+                    let bubbleClass = 'bg-white border-2 border-slate-200 text-slate-400';
+                    let textClass = 'text-slate-400';
+                    if (isActive) {
+                        if (isCancelled) {
+                            bubbleClass = 'bg-red-500 text-white ring-4 ring-red-100 scale-125';
+                            textClass = 'text-red-500';
+                        } else {
+                            bubbleClass = 'bg-blue-600 text-white ring-4 ring-blue-100 scale-125';
+                            textClass = 'text-blue-600';
+                        }
+                    } else if (isPast) {
+                        bubbleClass = 'bg-green-500 text-white';
+                        textClass = 'text-green-600';
+                    }
+                    return `
+                                                        <button onclick="${!isCancelled && order.status !== 'COMPLETED' ? `updateOrderStatus('${order.id}','${stage.id}')` : 'void(0)'}" 
+                                                            ${isCancelled || order.status === 'COMPLETED' ? 'disabled' : ''}
+                                                            class="relative z-10 flex flex-col items-center cursor-pointer disabled:cursor-not-allowed">
+                                                            <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${bubbleClass}">${isPast ? '✓' : idx + 1}</div>
+                                                            <span class="text-[10px] mt-2 font-bold uppercase ${textClass}">${stage.label}</span>
+                                                        </button>
+                                                    `;
+                }).join('')}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            ${isCancelled ? `
+                                                <div class="text-right"><div class="px-3 py-1 bg-red-100 text-red-700 rounded border border-red-200 text-xs font-bold">CANCELLED</div>
+                                                ${order.previousStatus ? `<p class="text-[9px] text-red-400 font-bold mt-1">During: ${stages.find(s => s.id === order.previousStatus)?.label || 'Processing'}</p>` : ''}</div>
+                                            ` : (order.status !== 'COMPLETED' ? `
+                                                <button onclick="openCancelOrderModal('${order.id}')" class="px-3 py-1.5 border border-red-200 text-red-500 hover:bg-red-50 rounded text-xs font-bold">Cancel</button>
+                                            ` : '')}
+                                        </div>
+                                    </div>
+                                    <div class="p-5 ${isCancelled ? 'bg-red-50/20' : 'bg-slate-50/30'}">
+                                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                            ${order.items.map(item => `
+                                                <div class="flex justify-between items-center bg-white p-3 rounded-lg border shadow-sm">
+                                                    <div class="flex flex-col overflow-hidden mr-2">
+                                                        <span class="text-xs font-bold truncate ${isCancelled ? 'text-slate-500' : 'text-slate-700'}">${item.part?.name || 'Unknown'}</span>
+                                                        <span class="text-[10px] text-slate-400">${item.part?.code} • ${item.part?.groupType || 'General'}</span>
+                                                    </div>
+                                                    <span class="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">x ${item.quantity}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+            }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderModals() {
+            return `
+                ${state.modals.partForm ? renderPartModal() : ''}
+                ${state.modals.stockWarning ? renderStockWarningModal() : ''}
+                ${state.modals.templateForm ? renderTemplateModal() : ''}
+                ${state.modals.templateSubmitConfirm ? renderTemplateSubmitConfirmModal() : ''}
+                ${state.modals.templateStockErrors.length > 0 ? renderTemplateStockErrorModal() : ''}
+                ${state.modals.orderCancelConfirm ? renderOrderCancelConfirmModal() : ''}
+            `;
+        }
+
+        // === MODAL RENDERS ===
+        function renderPartModal() {
+            const isEdit = !!state.modals.partFormEditing;
+            const part = isEdit ? state.parts.find(p => p.id === state.modals.partFormEditing) : state.partFormData;
+            return `
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in">
+                        
+                        ${state.modals.partDeleteConfirm ? `
+                            <div class="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
+                                <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </div>
+                                <h4 class="text-xl font-bold text-slate-800 mb-2">Delete this part?</h4>
+                                <p class="text-sm text-slate-500 mb-6">This action cannot be undone. The part "${part?.name}" will be permanently removed from inventory.</p>
+                                <div class="flex gap-3 w-full max-w-xs">
+                                    <button onclick="cancelDeletePart()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                    <button onclick="performDeletePart()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200">Yes, Delete</button>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                            <h3 class="text-lg font-bold text-slate-800">${isEdit ? 'Update Part Information' : 'Register New Part'}</h3>
+                            <button onclick="closePartModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onsubmit="handlePartFormSubmit(event)" class="p-8 space-y-6 bg-white">
+                            <div class="grid grid-cols-2 gap-6">
+                                <div class="col-span-1">
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Target Model</label>
+                                    <input type="text" id="partModelTarget" value="${part?.modelTarget || ''}" placeholder="e.g. MF55, SF50" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                    <p class="text-[9px] text-slate-400 mt-1">Accepts multiple models (comma separated)</p>
+                                </div>
+                                <div class="col-span-1">
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Group Type</label>
+                                    <select id="partGroupType" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium">
+                                        <option value="Prep Support" ${part?.groupType === 'Prep Support' ? 'selected' : ''}>Prep Support</option>
+                                        <option value="Single Assy" ${part?.groupType === 'Single Assy' ? 'selected' : ''}>Single Assy</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Part Identity (Code & Name)</label>
+                                <div class="flex gap-3">
+                                    <input type="text" id="partCode" value="${part?.code || ''}" placeholder="P000" required class="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                    <input type="text" id="partName" value="${part?.name || ''}" placeholder="Full component name" required class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                    <input type="text" id="partUnit" value="${part?.unit || 'pcs'}" placeholder="Unit" class="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                </div>
+                            </div>
+
+                            <div class="p-4 border border-blue-100 bg-blue-50/30 rounded-xl">
+                                <div class="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Current</label>
+                                        <input type="number" id="partCurrentQty" value="${part?.currentQty || 0}" min="0" required class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Max (Capacity)</label>
+                                        <input type="number" id="partMaxStock" value="${part?.maxStock || 0}" min="1" required class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-blue-500 uppercase mb-1.5">Alert Limit (%)</label>
+                                        <input type="number" id="partAlertThreshold" value="${part?.alertThreshold || 20}" min="1" max="100" required class="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-blue-700" />
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center mt-2">
+                                    <p class="text-[10px] text-blue-400 font-medium">Auto-alert when stock drops below ${part?.alertThreshold || 20}% (${Math.round(((part?.maxStock || 0) * (part?.alertThreshold || 20) / 100))} ${part?.unit || 'pcs'})</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Warehouse Location</label>
+                                <input type="text" id="partLocation" value="${part?.location || ''}" placeholder="e.g. A-101" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                            </div>
+
+                            <div class="pt-4 flex gap-4 border-t border-slate-50 mt-2 items-center">
+                                ${isEdit ? `
+                                    <button type="button" onclick="confirmDeletePart()" class="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition-colors" title="Delete Part">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                ` : ''}
+                                <div class="flex-1 flex gap-4">
+                                    <button type="button" onclick="closePartModal()" class="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm hover:bg-slate-50 transition-all">Discard</button>
+                                    <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all">
+                                        ${isEdit ? 'Save Updates' : 'Confirm Registration'}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStockWarningModal() {
+            const { part, qty } = state.modals.stockWarningData || {};
+            return `
+                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 p-4 flex items-center justify-center animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in zoom-in">
+                        <div class="p-6">
+                            <div class="flex items-start gap-4">
+                                <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-2xl shrink-0">⚠️</div>
+                                <div class="flex-1">
+                                    <h4 class="font-bold text-slate-800 mb-2">Low Stock Warning</h4>
+                                    <p class="text-sm text-slate-600 mb-4">Withdrawing <strong>${qty} ${part?.unit}</strong> of <strong>${part?.name}</strong> will bring stock below alert threshold.</p>
+                                    <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
+                                        <div class="flex justify-between"><span class="text-slate-500">Current Stock</span><span class="font-bold">${part?.currentQty} ${part?.unit}</span></div>
+                                        <div class="flex justify-between"><span class="text-slate-500">After Withdrawal</span><span class="font-bold text-red-600">${(part?.currentQty || 0) - (qty || 0)} ${part?.unit}</span></div>
+                                        <div class="flex justify-between"><span class="text-slate-500">Alert Threshold</span><span class="font-bold">${Math.round((part?.maxStock || 0) * (part?.alertThreshold || 0) / 100)} ${part?.unit}</span></div>
+                                    </div>
+                                    <div class="flex gap-3 justify-end mt-4">
+                                        <button onclick="closeStockWarning()" class="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg font-bold text-sm">Cancel</button>
+                                        <button onclick="proceedWithWarning()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-sm">Proceed Anyway</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTemplateModal() {
+            const isEdit = !!state.modals.templateFormEditing;
+            const tpl = isEdit ? state.templates.find(t => t.id === state.modals.templateFormEditing) : state.templateFormData;
+            const filtered = state.templateFormData.searchTerm ?
+                state.parts.filter(p => p.name.toLowerCase().includes(state.templateFormData.searchTerm.toLowerCase()) ||
+                    p.code.toLowerCase().includes(state.templateFormData.searchTerm.toLowerCase())) : state.parts;
+            return `
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col overflow-hidden animate-in zoom-in relative">
+                        
+                        ${state.modals.templateDeleteConfirm ? `
+                            <div class="absolute inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
+                                <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </div>
+                                <h4 class="text-xl font-bold text-slate-800 mb-2">Delete this Template?</h4>
+                                <p class="text-sm text-slate-500 mb-6">This action cannot be undone. The template "${tpl?.name}" will be removed.</p>
+                                <div class="flex gap-3 w-full max-w-xs">
+                                    <button onclick="cancelDeleteTemplate()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                    <button onclick="performDeleteTemplate()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200">Yes, Delete</button>
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+                            <h3 class="text-lg font-bold text-slate-800">${isEdit ? 'Edit Withdrawal Template' : 'Create New Template'}</h3>
+                            <button onclick="closeTemplateModal()" class="text-slate-400 hover:text-slate-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="flex-1 flex overflow-hidden">
+                            <!-- Left: BOM / Configuration -->
+                            <div class="w-1/2 p-6 border-r border-slate-100 flex flex-col overflow-y-auto bg-slate-50/50">
+                                <div class="space-y-4 mb-6">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Template Name</label>
+                                        <input type="text" id="tplName" value="${tpl?.name || ''}" placeholder="e.g. Daily Run C1" class="w-full px-4 py-2 border rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Model</label>
+                                        <input type="text" id="tplModel" value="${tpl?.targetModel || ''}" placeholder="e.g. MF55" class="w-full px-4 py-2 border rounded-lg text-sm" />
+                                    </div>
+                                </div>
+
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-end mb-2">
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase">Withdrawal List (BOM)</label>
+                                        <span class="text-xs font-bold text-blue-600">${state.templateFormData.items.length} items selected</span>
+                                    </div>
+                                    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden min-h-[200px]">
+                                        ${state.templateFormData.items.length === 0 ? `
+                                            <div class="p-8 text-center text-slate-400 text-sm">Select parts from the catalog on the right</div>
+                                        ` : `
+                                            <div class="divide-y divide-slate-100">
+                                                ${state.templateFormData.items.map((item, idx) => {
+                const part = state.parts.find(p => p.id === item.partId);
+                return `
+                                                        <div class="p-3 flex items-center justify-between hover:bg-slate-50">
+                                                            <div class="flex-1">
+                                                                <div class="text-sm font-bold text-slate-800">${part?.name}</div>
+                                                                <div class="text-[10px] text-slate-400">${part?.code}</div>
+                                                            </div>
+                                                            <div class="flex items-center gap-3">
+                                                                <input type="number" min="1" value="${item.quantity}" oninput="updateTemplateItemQty(${idx}, this.value)" class="w-16 px-2 py-1 border rounded text-center text-sm font-bold" />
+                                                                <button onclick="removePartFromTemplate(${idx})" class="text-red-400 hover:text-red-600 p-1">&times;</button>
+                                                            </div>
+                                                        </div>
+                                                    `;
+            }).join('')}
+                                            </div>
+                                        `}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Part Catalog -->
+                            <div class="w-1/2 p-6 flex flex-col overflow-hidden bg-white">
+                                <div class="mb-4">
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">Part Catalog</label>
+                                    <input type="text" oninput="updateTemplateSearch(this.value)" value="${state.templateFormData.searchTerm}" placeholder="Search by Name or Model..." class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                <div class="flex-1 overflow-y-auto pr-2 space-y-2">
+                                    ${filtered.map(part => {
+                const inCart = state.templateFormData.items.some(i => i.partId === part.id);
+                return `
+                                            <div class="p-3 border rounded-lg flex justify-between items-center transition-all ${inCart ? 'border-blue-200 bg-blue-50' : 'border-slate-100 hover:border-blue-300'}">
+                                                <div>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-xs font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">${part.modelTarget || 'ALL'}</span>
+                                                        <span class="text-sm font-bold text-slate-800">${part.name}</span>
+                                                    </div>
+                                                    <div class="text-xs text-slate-500 mt-1">${part.code} • Stock: ${part.currentQty}</div>
+                                                </div>
+                                                <button onclick="addPartToTemplate('${part.id}')" ${inCart ? 'disabled' : ''} class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${inCart ? 'bg-blue-200 text-blue-600' : 'bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white'}">
+                                                    ${inCart ? '✓' : '+'}
+                                                </button>
+                                            </div>
+                                        `;
+            }).join('')}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center shrink-0 z-10">
+                            ${isEdit ? `
+                                <button onclick="confirmDeleteTemplate()" class="w-10 h-10 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition-colors mr-auto" title="Delete Template">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            ` : '<div class="mr-auto"></div>'}
+                            <div class="flex gap-3">
+                                <button onclick="closeTemplateModal()" class="px-6 py-2 border border-slate-200 rounded-lg font-bold text-slate-500 hover:bg-white text-sm">Cancel</button>
+                                <button onclick="handleTemplateSave()" class="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm shadow-lg">Save Template</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTemplateSubmitConfirmModal() {
+            const tpl = state.modals.templateSubmitTarget;
+            if (!tpl) return '';
+            return `
+                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center animate-in zoom-in">
+                        <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-2">Confirm Job Order</h3>
+                        <p class="text-slate-500 mb-6">
+                            Create order for <strong>"${tpl.name}"</strong>? <br/>
+                            <span class="text-xs bg-slate-100 px-2 py-1 rounded mt-2 inline-block">Items will be deducted from inventory immediately.</span>
+                        </p>
+                        <div class="flex gap-4">
+                            <button onclick="closeTemplateSubmitConfirm()" class="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onclick="performTemplateSubmit()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Confirm Submit</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTemplateStockErrorModal() {
+            return `
+                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in">
+                        <div class="flex items-center gap-3 mb-4 text-red-600 border-b border-red-50 pb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <h3 class="text-xl font-bold">Insufficient Stock</h3>
+                        </div>
+                        <p class="text-sm text-slate-500 mb-4">Cannot create order. The following items have insufficient stock:</p>
+                        <ul class="bg-red-50 rounded-lg p-4 space-y-2 mb-6 max-h-60 overflow-y-auto">
+                            ${state.modals.templateStockErrors.map(err => `
+                                <li class="text-xs font-bold text-red-700 flex items-start gap-2">
+                                    <span>•</span> ${err.partName} (Need: ${err.required}, Stock: ${err.available})
+                                </li>
+                            `).join('')}
+                        </ul>
+                        <button onclick="closeTemplateStockError()" class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800">Close</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderOrderCancelConfirmModal() {
+            const order = state.modals.orderCancelTarget;
+            if (!order) return '';
+            return `
+                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-in zoom-in">
+                        <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 mb-2">Cancel Production Order?</h3>
+                        <p class="text-sm text-slate-500 mb-6">Order <strong>${order.orderNo}</strong> will be stopped at the current stage.</p>
+                        <div class="flex gap-3">
+                            <button onclick="closeCancelOrderModal()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 text-sm">Go Back</button>
+                            <button onclick="performCancelOrder()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200 text-sm">Yes, Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // === EVENT HANDLERS ===
+        function toggleSidebar() {
+            state.sidebarCollapsed = !state.sidebarCollapsed;
+            render();
+        }
+
+        function switchView(view) {
+            state.view = view;
+            render();
+        }
+
+        // Part Modal
+        function openPartModal() {
+            state.modals.partForm = true;
+            state.modals.partFormEditing = null;
+            state.partFormData = { code: '', name: '', category: '', currentQty: 0, maxStock: 0, alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support' };
+            render();
+        }
+
+        function editPart(id) {
+            state.modals.partForm = true;
+            state.modals.partFormEditing = id;
+            render();
+        }
+
+        function closePartModal() {
+            state.modals.partForm = false;
+            state.modals.partFormEditing = null;
+            state.modals.partDeleteConfirm = false;
+            render();
+        }
+
+        function handlePartFormSubmit(e) {
+            e.preventDefault();
+            const data = {
+                code: document.getElementById('partCode').value,
+                name: document.getElementById('partName').value,
+                category: document.getElementById('partCategory').value,
+                currentQty: parseInt(document.getElementById('partCurrentQty').value),
+                maxStock: parseInt(document.getElementById('partMaxStock').value),
+                alertThreshold: parseInt(document.getElementById('partAlertThreshold').value),
+                unit: document.getElementById('partUnit').value,
+                location: document.getElementById('partLocation').value,
+                modelTarget: document.getElementById('partModelTarget').value,
+                groupType: document.getElementById('partGroupType').value
+            };
+            if (state.modals.partFormEditing) {
+                updatePart(state.modals.partFormEditing, data);
+            } else {
+                addPart(data);
+            }
+            closePartModal();
+            render();
+        }
+
+        function confirmDeletePart() {
+            state.modals.partDeleteConfirm = true;
+            render();
+        }
+
+        function cancelDeletePart() {
+            state.modals.partDeleteConfirm = false;
+            render();
+        }
+
+        function performDeletePart() {
+            if (state.modals.partFormEditing) {
+                deletePart(state.modals.partFormEditing);
+            }
+            closePartModal();
+            render();
+        }
+
+        // Quick Withdrawal
+        function handleQuickWithdrawal(e) {
+            e.preventDefault();
+            const partId = document.getElementById('quickPart').value;
+            const qty = parseInt(document.getElementById('quickQty').value);
+            const part = state.parts.find(p => p.id === partId);
+            if (!part) return;
+            if (part.currentQty < qty) {
+                alert(`Insufficient stock! Only ${part.currentQty} ${part.unit} available.`);
+                return;
+            }
+            const threshold = part.maxStock * part.alertThreshold / 100;
+            if ((part.currentQty - qty) < threshold) {
+                state.modals.stockWarning = true;
+                state.modals.stockWarningData = { part, qty };
+                render();
+            } else {
+                withdrawPart(partId, qty);
+                e.target.reset();
+                render();
+            }
+        }
+
+        function closeStockWarning() {
+            state.modals.stockWarning = false;
+            state.modals.stockWarningData = null;
+            render();
+        }
+
+        function proceedWithWarning() {
+            const { part, qty } = state.modals.stockWarningData;
+            withdrawPart(part.id, qty);
+            closeStockWarning();
+            document.getElementById('quickPart').value = '';
+            document.getElementById('quickQty').value = '1';
+            render();
+        }
+
+        // Template Modal
+        function openTemplateModal() {
+            state.modals.templateForm = true;
+            state.modals.templateFormEditing = null;
+            state.templateFormData = { name: '', targetModel: '', items: [], searchTerm: '' };
+            render();
+        }
+
+        function editTemplate(id) {
+            const tpl = state.templates.find(t => t.id === id);
+            if (tpl) {
+                state.modals.templateForm = true;
+                state.modals.templateFormEditing = id;
+                state.templateFormData = { name: tpl.name, targetModel: tpl.targetModel, items: [...tpl.items], searchTerm: '' };
+                render();
+            }
+        }
+
+        function closeTemplateModal() {
+            state.modals.templateForm = false;
+            state.modals.templateFormEditing = null;
+            state.modals.templateDeleteConfirm = false;
+            render();
+        }
+
+        function updateTemplateSearch(value) {
+            state.templateFormData.searchTerm = value;
+            render();
+        }
+
+        function addPartToTemplate(partId) {
+            if (!state.templateFormData.items.find(i => i.partId === partId)) {
+                state.templateFormData.items.push({ partId, quantity: 1 });
+                render();
+            }
+        }
+
+        function removePartFromTemplate(idx) {
+            state.templateFormData.items.splice(idx, 1);
+            render();
+        }
+
+        function updateTemplateItemQty(idx, value) {
+            const qty = parseInt(value) || 1;
+            state.templateFormData.items[idx].quantity = Math.max(1, qty);
+        }
+
+        function handleTemplateSave() {
+            const name = document.getElementById('tplName').value.trim();
+            const targetModel = document.getElementById('tplModel').value.trim();
+            if (!name) {
+                alert('Please enter a template name');
+                return;
+            }
+            if (state.templateFormData.items.length === 0) {
+                alert('Please add at least one part');
+                return;
+            }
+            saveTemplate({ name, targetModel, items: state.templateFormData.items });
+            closeTemplateModal();
+            render();
+        }
+
+        function confirmDeleteTemplate() {
+            state.modals.templateDeleteConfirm = true;
+            render();
+        }
+
+        function cancelDeleteTemplate() {
+            state.modals.templateDeleteConfirm = false;
+            render();
+        }
+
+        function performDeleteTemplate() {
+            if (state.modals.templateFormEditing) {
+                deleteTemplate(state.modals.templateFormEditing);
+            }
+            closeTemplateModal();
+            render();
+        }
+
+        // Template Submit
+        function submitTemplate(id) {
+            const tpl = state.templates.find(t => t.id === id);
+            if (!tpl) return;
+            const errors = [];
+            tpl.items.forEach(item => {
+                const part = state.parts.find(p => p.id === item.partId);
+                if (!part || part.currentQty < item.quantity) {
+                    errors.push({
+                        partName: part?.name || 'Unknown',
+                        partCode: part?.code || 'Unknown',
+                        required: item.quantity,
+                        available: part?.currentQty || 0,
+                        unit: part?.unit || 'pcs'
+                    });
+                }
+            });
+            if (errors.length > 0) {
+                state.modals.templateStockErrors = errors;
+                render();
+            } else {
+                state.modals.templateSubmitConfirm = true;
+                state.modals.templateSubmitTarget = tpl;
+                render();
+            }
+        }
+
+        function closeTemplateSubmitConfirm() {
+            state.modals.templateSubmitConfirm = false;
+            state.modals.templateSubmitTarget = null;
+            render();
+        }
+
+        function performTemplateSubmit() {
+            const tpl = state.modals.templateSubmitTarget;
+            if (tpl) {
+                createOrder(tpl.name, tpl.items, tpl.targetModel);
+            }
+            closeTemplateSubmitConfirm();
+            state.view = 'orders';
+            render();
+        }
+
+        function closeTemplateStockError() {
+            state.modals.templateStockErrors = [];
+            render();
+        }
+
+        // Order Cancel
+        function openCancelOrderModal(orderId) {
+            const order = state.orders.find(o => o.id === orderId);
+            if (order) {
+                state.modals.orderCancelConfirm = true;
+                state.modals.orderCancelTarget = order;
+                render();
+            }
+        }
+
+        function closeCancelOrderModal() {
+            state.modals.orderCancelConfirm = false;
+            state.modals.orderCancelTarget = null;
+            render();
+        }
+
+        function performCancelOrder() {
+            if (state.modals.orderCancelTarget) {
+                updateOrderStatus(state.modals.orderCancelTarget.id, 'CANCELLED');
+            }
+            closeCancelOrderModal();
+            render();
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+
+</html>
