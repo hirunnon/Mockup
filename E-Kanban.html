@@ -4,1160 +4,1359 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Kanban Pro - C1/C2 Line System</title>
+    <title>E-Kanban System - Complete Demo</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        @keyframes fade-in {
-            from {
-                opacity: 0;
-            }
-
-            to {
-                opacity: 1;
-            }
-        }
-
-        @keyframes slide-in-from-top-4 {
-            from {
-                transform: translateY(-1rem);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes zoom-in {
-            from {
-                transform: scale(0.95);
-                opacity: 0;
-            }
-
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        .animate-in {
-            animation-duration: 200ms;
-            animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .fade-in {
-            animation-name: fade-in;
-        }
-
-        .slide-in-from-top-4 {
-            animation-name: slide-in-from-top-4;
-        }
-
-        .zoom-in {
-            animation-name: zoom-in;
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
         }
     </style>
 </head>
 
-<body class="bg-slate-50">
-    <div id="app"></div>
+<body>
+    <div id="root"></div>
 
-    <script>
-        // === DATA & STATE ===
-        const DB_KEY = 'sharp_ekanban_db';
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
 
-        const getDB = () => {
-            const data = localStorage.getItem(DB_KEY);
-            if (!data) {
-                const initial = {
-                    parts: [
-                        { id: '1', code: 'P001', name: 'Micro Controller Unit', category: 'Electronics', currentQty: 450, maxStock: 500, alertThreshold: 20, unit: 'pcs', location: 'A-101', modelTarget: 'MF55', groupType: 'Prep Support' },
-                        { id: '2', code: 'P002', name: 'Heat Sink 40x40', category: 'Hardware', currentQty: 250, maxStock: 300, alertThreshold: 30, unit: 'pcs', location: 'B-205', modelTarget: 'MF51', groupType: 'Single Assy' },
-                        { id: '3', code: 'P003', name: 'Power Cable 1.5m', category: 'Cables', currentQty: 80, maxStock: 100, alertThreshold: 25, unit: 'units', location: 'C-012', modelTarget: 'SF50', groupType: 'Prep Support' },
-                        { id: '4', code: 'P004', name: 'Capacitor 100uF', category: 'Electronics', currentQty: 1000, maxStock: 1000, alertThreshold: 15, unit: 'pcs', location: 'A-302', modelTarget: 'X502', groupType: 'Single Assy' },
-                        { id: '5', code: 'P005', name: 'Main Frame Chassis', category: 'Mechanical', currentQty: 15, maxStock: 20, alertThreshold: 50, unit: 'units', location: 'D-001', modelTarget: 'MF55', groupType: 'Prep Support' },
-                    ],
-                    orders: [
-                        { id: 'ord-001', orderNo: 'REQ-MF55-001', items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 1 }], status: 'PROD_ASSY', requestedBy: 'C2 Line Operator', createdAt: new Date(Date.now() - 3600000 * 5).toISOString(), targetModel: 'MF55' },
-                        { id: 'ord-002', orderNo: 'REQ-SF50-002', items: [{ partId: '3', quantity: 50 }], status: 'PART_CONTROL', requestedBy: 'C1 Line Lead', createdAt: new Date(Date.now() - 3600000).toISOString(), targetModel: 'SF50' }
-                    ],
-                    templates: [
-                        { id: 'tpl-1', name: 'Daily Run C1', targetModel: 'MF55', items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 2 }], updatedAt: new Date().toISOString() }
-                    ],
-                    withdrawalHistory: []
-                };
-                localStorage.setItem(DB_KEY, JSON.stringify(initial));
-                return initial;
-            }
-            return JSON.parse(data);
-        };
-        const saveDB = (db) => localStorage.setItem(DB_KEY, JSON.stringify(db));
-
-        let state = {
-            view: 'inventory',
-            sidebarCollapsed: false,
-            parts: [],
-            orders: [],
-            templates: [],
-            withdrawalHistory: [],
-            partFormData: { code: '', name: '', category: '', currentQty: 0, maxStock: 0, alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support' },
-            templateFormData: { name: '', targetModel: '', items: [], searchTerm: '' },
-            modals: {
-                partForm: false,
-                partFormEditing: null,
-                partDeleteConfirm: false,
-                stockWarning: false,
-                stockWarningData: null,
-                templateForm: false,
-                templateFormEditing: null,
-                templateDeleteConfirm: false,
-                templateSubmitConfirm: false,
-                templateSubmitTarget: null,
-                templateStockErrors: [],
-                orderCancelConfirm: false,
-                orderCancelTarget: null
-            }
+        // ============================================================
+        // CONSTANTS & TYPES
+        // ============================================================
+        const OrderStatus = {
+            PENDING: 'PENDING',
+            PART_CONTROL: 'PART_CONTROL',
+            PART_SUPPLY: 'PART_SUPPLY',
+            PROD_ASSY: 'PROD_ASSY',
+            AGING: 'AGING',
+            FINAL: 'FINAL',
+            COMPLETED: 'COMPLETED',
+            CANCELLED: 'CANCELLED'
         };
 
-        function init() {
-            const db = getDB();
-            state.parts = db.parts;
-            state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: db.parts.find(p => p.id === i.partId) })) }));
-            state.templates = db.templates;
-            state.withdrawalHistory = db.withdrawalHistory;
-            render();
-        }
+        const INITIAL_PARTS = [
+            { id: '1', code: 'P001', name: 'Micro Controller Unit', category: 'Electronics', currentQty: 450, maxStock: 500, alertThreshold: 20, unit: 'pcs', location: 'A-101', modelTarget: 'MF55', groupType: 'Prep Support' },
+            { id: '2', code: 'P002', name: 'Heat Sink 40x40', category: 'Hardware', currentQty: 250, maxStock: 300, alertThreshold: 30, unit: 'pcs', location: 'B-205', modelTarget: 'MF51', groupType: 'Single Assy' },
+            { id: '3', code: 'P003', name: 'Power Cable 1.5m', category: 'Cables', currentQty: 80, maxStock: 100, alertThreshold: 25, unit: 'units', location: 'C-012', modelTarget: 'SF50', groupType: 'Prep Support' },
+            { id: '4', code: 'P004', name: 'Capacitor 100uF', category: 'Electronics', currentQty: 1000, maxStock: 1000, alertThreshold: 15, unit: 'pcs', location: 'A-302', modelTarget: 'X502', groupType: 'Single Assy' },
+            { id: '5', code: 'P005', name: 'Main Frame Chassis', category: 'Mechanical', currentQty: 15, maxStock: 20, alertThreshold: 50, unit: 'units', location: 'D-001', modelTarget: 'MF55', groupType: 'Prep Support' }
+        ];
 
-        // === API FUNCTIONS ===
-        function addPart(part) {
-            const db = getDB();
-            const newPart = { ...part, id: 'p' + Date.now() };
-            db.parts.push(newPart);
-            saveDB(db);
-            state.parts = db.parts;
-        }
-
-        function updatePart(id, updates) {
-            const db = getDB();
-            const idx = db.parts.findIndex(p => p.id === id);
-            if (idx >= 0) {
-                db.parts[idx] = { ...db.parts[idx], ...updates };
-                saveDB(db);
-                state.parts = db.parts;
+        const INITIAL_ORDERS = [
+            {
+                id: 'ord-001', orderNo: 'REQ-MF55-001',
+                items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 1 }],
+                status: OrderStatus.PROD_ASSY, requestedBy: 'C2 Line Operator',
+                createdAt: new Date(Date.now() - 3600000 * 5).toISOString(), targetModel: 'MF55'
+            },
+            {
+                id: 'ord-002', orderNo: 'REQ-SF50-002',
+                items: [{ partId: '3', quantity: 50 }],
+                status: OrderStatus.PART_CONTROL, requestedBy: 'C1 Line Lead',
+                createdAt: new Date(Date.now() - 3600000).toISOString(), targetModel: 'SF50'
             }
-        }
+        ];
 
-        function deletePart(id) {
-            const db = getDB();
-            db.parts = db.parts.filter(p => p.id !== id);
-            saveDB(db);
-            state.parts = db.parts;
-        }
+        // ============================================================
+        // API SERVICE (IN-MEMORY DATABASE)
+        // ============================================================
+        let partsDB = [...INITIAL_PARTS];
+        let ordersDB = [...INITIAL_ORDERS];
+        let withdrawalHistoryDB = [];
+        let templatesDB = [
+            { id: 'tpl-1', name: 'Std. Assy Kit - MF55', targetModel: 'MF55', items: [{ partId: '1', quantity: 10 }, { partId: '5', quantity: 5 }], updatedAt: new Date().toISOString() },
+            { id: 'tpl-2', name: 'Emergency Repair Set A', targetModel: 'ALL', items: [{ partId: '2', quantity: 2 }, { partId: '3', quantity: 2 }], updatedAt: new Date().toISOString() }
+        ];
 
-        function withdrawPart(partId, qty) {
-            const db = getDB();
-            const part = db.parts.find(p => p.id === partId);
-            if (part) {
+        const api = {
+            getParts: async () => new Promise(resolve => setTimeout(() => resolve([...partsDB]), 300)),
+            addPart: async (newPart) => {
+                const part = { ...newPart, id: Math.random().toString(36).substr(2, 9) };
+                partsDB = [...partsDB, part];
+                return part;
+            },
+            updatePart: async (id, updatedFields) => {
+                const index = partsDB.findIndex(p => p.id === id);
+                if (index === -1) throw new Error('Part not found');
+                partsDB[index] = { ...partsDB[index], ...updatedFields };
+                return partsDB[index];
+            },
+            deletePart: async (id) => {
+                partsDB = partsDB.filter(p => p.id !== id);
+                return new Promise(resolve => setTimeout(resolve, 300));
+            },
+            withdrawPart: async (partId, qty) => {
+                const part = partsDB.find(p => p.id === partId);
+                if (!part) throw new Error('Part not found');
+                if (part.currentQty < qty) throw new Error('Insufficient stock');
                 part.currentQty -= qty;
-                db.withdrawalHistory.push({
-                    id: 'wh' + Date.now(),
-                    partName: part.name,
-                    partCode: part.code,
-                    quantity: qty,
-                    withdrawnBy: 'Production Lead',
-                    timestamp: new Date().toISOString(),
-                    status: 'SUCCESS'
+                withdrawalHistoryDB.unshift({
+                    id: Math.random().toString(36).substr(2, 9),
+                    partId: part.id, partName: part.name, partCode: part.code,
+                    quantity: qty, timestamp: new Date().toISOString(),
+                    withdrawnBy: 'Admin User', status: 'SUCCESS'
                 });
-                saveDB(db);
-                state.parts = db.parts;
-                state.withdrawalHistory = db.withdrawalHistory;
-            }
-        }
-
-        function createOrder(name, items, targetModel) {
-            const db = getDB();
-            const orderNo = 'REQ-' + (targetModel || 'GEN') + '-' + String(db.orders.length + 1).padStart(3, '0');
-            const newOrder = {
-                id: 'ord' + Date.now(),
-                orderNo,
-                items: items,
-                status: 'PENDING',
-                requestedBy: 'System Administrator',
-                createdAt: new Date().toISOString(),
-                targetModel: targetModel || undefined
-            };
-            items.forEach(item => {
-                const part = db.parts.find(p => p.id === item.partId);
-                if (part) part.currentQty -= item.quantity;
-            });
-            db.orders.push(newOrder);
-            saveDB(db);
-            state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: db.parts.find(p => p.id === i.partId) })) }));
-            state.parts = db.parts;
-        }
-
-        function updateOrderStatus(orderId, newStatus) {
-            const db = getDB();
-            const order = db.orders.find(o => o.id === orderId);
-            if (order) {
-                if (newStatus === 'CANCELLED') order.previousStatus = order.status;
-                order.status = newStatus;
-                saveDB(db);
-                state.orders = db.orders.map(o => ({ ...o, items: o.items.map(i => ({ ...i, part: state.parts.find(p => p.id === i.partId) })) }));
-            }
-        }
-
-        function saveTemplate(template) {
-            const db = getDB();
-            if (state.modals.templateFormEditing) {
-                const idx = db.templates.findIndex(t => t.id === state.modals.templateFormEditing);
-                if (idx >= 0) {
-                    db.templates[idx] = { ...db.templates[idx], ...template, updatedAt: new Date().toISOString() };
+            },
+            getWithdrawalHistory: async () => new Promise(resolve => setTimeout(() => resolve([...withdrawalHistoryDB]), 300)),
+            getTemplates: async () => new Promise(resolve => setTimeout(() => resolve([...templatesDB]), 300)),
+            saveTemplate: async (template) => {
+                const newTpl = { ...template, id: `tpl-${Math.random().toString(36).substr(2, 9)}`, updatedAt: new Date().toISOString() };
+                templatesDB = [...templatesDB, newTpl];
+                return newTpl;
+            },
+            updateTemplate: async (id, updates) => {
+                const idx = templatesDB.findIndex(t => t.id === id);
+                if (idx !== -1) templatesDB[idx] = { ...templatesDB[idx], ...updates, updatedAt: new Date().toISOString() };
+            },
+            deleteTemplate: async (id) => {
+                templatesDB = templatesDB.filter(t => t.id !== id);
+                return new Promise(resolve => setTimeout(resolve, 300));
+            },
+            getOrders: async () => {
+                const enriched = ordersDB.map(order => ({
+                    ...order,
+                    items: order.items.map(item => ({ ...item, part: partsDB.find(p => p.id === item.partId) }))
+                }));
+                return new Promise(resolve => setTimeout(() => resolve(enriched), 300));
+            },
+            createOrder: async (requestedBy, items, targetModel = 'N/A') => {
+                for (const item of items) {
+                    const part = partsDB.find(p => p.id === item.partId);
+                    if (!part || part.currentQty < item.quantity) {
+                        throw new Error(`Insufficient stock for ${part?.name || 'unknown part'}`);
+                    }
                 }
-            } else {
-                const newTpl = { ...template, id: 'tpl' + Date.now(), updatedAt: new Date().toISOString() };
-                db.templates.push(newTpl);
+                for (const item of items) {
+                    const part = partsDB.find(p => p.id === item.partId);
+                    part.currentQty -= item.quantity;
+                }
+                const newOrder = {
+                    id: `ord-${Math.random().toString(36).substr(2, 9)}`,
+                    orderNo: `REQ-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`,
+                    items: [...items], status: OrderStatus.PENDING, requestedBy,
+                    createdAt: new Date().toISOString(), targetModel
+                };
+                ordersDB = [newOrder, ...ordersDB];
+                return new Promise(resolve => setTimeout(() => resolve(newOrder), 300));
+            },
+            updateOrderStatus: async (orderId, newStatus) => {
+                const order = ordersDB.find(o => o.id === orderId);
+                if (order) {
+                    if (newStatus === OrderStatus.CANCELLED && order.status !== OrderStatus.CANCELLED) {
+                        order.previousStatus = order.status;
+                    }
+                    if (newStatus === OrderStatus.PART_CONTROL && !order.supplySlipId) {
+                        order.supplySlipId = `SLP-${Math.floor(100000 + Math.random() * 900000)}`;
+                    }
+                    order.status = newStatus;
+                }
             }
-            saveDB(db);
-            state.templates = db.templates;
-        }
+        };
 
-        function deleteTemplate(id) {
-            const db = getDB();
-            db.templates = db.templates.filter(t => t.id !== id);
-            saveDB(db);
-            state.templates = db.templates;
-        }
-
-        // === RENDER ===
-        function render() {
-            document.getElementById('app').innerHTML = `
-                <div class="flex h-screen bg-slate-50 overflow-hidden">
-                    ${renderSidebar()}
-                    ${renderMain()}
-                </div>
-                ${renderModals()}
-            `;
-        }
-
-        function renderSidebar() {
+        // ============================================================
+        // LAYOUT COMPONENT
+        // ============================================================
+        function Layout({ children, activeView, onViewChange }) {
+            const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
             const menuItems = [
                 { id: 'inventory', label: 'Part Control (Stock)', icon: '📦' },
                 { id: 'single-withdrawal', label: 'Urgent Supply', icon: '⚡' },
                 { id: 'list-withdrawal', label: 'Prod. Master Plan', icon: '📋' },
-                { id: 'orders', label: 'Production Monitor', icon: '📺' },
+                { id: 'orders', label: 'Production Monitor', icon: '📺' }
             ];
-            return `
-                <aside class="${state.sidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-white flex flex-col shadow-xl transition-all duration-300">
-                    <div class="p-4 flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'gap-3'} border-b border-slate-800 min-h-[88px]">
-                        <button onclick="toggleSidebar()" class="hover:scale-105 transition-transform focus:outline-none">
-                            <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shadow-lg">
-                                <img src="https://companieslogo.com/img/orig/6753.T-a0ba4ea8.png?t=1720244490" alt="Sharp" class="w-full h-full object-contain" />
+
+            return (
+                <div className="flex h-screen bg-slate-50 overflow-hidden">
+                    <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-white flex flex-col shadow-xl transition-all duration-300`}>
+                        <div className={`p-4 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} border-b border-slate-800 min-h-[88px]`}>
+                            <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hover:scale-105 transition-transform focus:outline-none group" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
+                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shadow-lg border border-slate-200 group-hover:shadow-red-500/20 transition-all overflow-hidden">
+                                    <img src="https://companieslogo.com/img/orig/6753.T-a0ba4ea8.png?t=1720244490" alt="Logo" className="w-full h-full object-contain" />
+                                </div>
+                            </button>
+                            {!isSidebarCollapsed && (
+                                <div className="overflow-hidden whitespace-nowrap transition-opacity duration-300">
+                                    <h1 className="text-xl font-bold tracking-tight"><span className="text-blue-400">E-</span>Kanban Pro</h1>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">C1/C2 Line System</p>
+                                </div>
+                            )}
+                        </div>
+                        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+                            <ul className="space-y-2">
+                                {menuItems.map(item => (
+                                    <li key={item.id}>
+                                        <button onClick={() => onViewChange(item.id)} title={isSidebarCollapsed ? item.label : ''}
+                                            className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium h-12 ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-4'} ${activeView === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
+                                            <span className="text-xl shrink-0">{item.icon}</span>
+                                            {!isSidebarCollapsed && <span className="whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </nav>
+                        <div className="p-4 border-t border-slate-800">
+                            <div className={`bg-slate-800 rounded-lg p-2 flex items-center transition-all ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+                                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold shrink-0 shadow-lg">AD</div>
+                                {!isSidebarCollapsed && (
+                                    <div className="overflow-hidden whitespace-nowrap">
+                                        <p className="text-sm font-medium">Production Lead</p>
+                                        <p className="text-[10px] text-slate-500 uppercase">System Administrator</p>
+                                    </div>
+                                )}
                             </div>
-                        </button>
-                        ${!state.sidebarCollapsed ? `
-                            <div><h1 class="text-xl font-bold"><span class="text-blue-400">E-</span>Kanban Pro</h1>
-                            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">C1/C2 Line System</p></div>
-                        ` : ''}
-                    </div>
-                    <nav class="flex-1 px-3 py-4 overflow-y-auto">
-                        <ul class="space-y-2">
-                            ${menuItems.map(item => `
-                                <li><button onclick="switchView('${item.id}')" class="w-full flex items-center rounded-lg transition-all text-sm font-medium h-12 ${state.sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-4'} ${state.view === item.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}">
-                                    <span class="text-xl">${item.icon}</span>
-                                    ${!state.sidebarCollapsed ? `<span>${item.label}</span>` : ''}
-                                </button></li>
-                            `).join('')}
-                        </ul>
-                    </nav>
-                    <div class="p-4 border-t border-slate-800">
-                        <div class="bg-slate-800 rounded-lg p-2 flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'gap-3'}">
-                            <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold">AD</div>
-                            ${!state.sidebarCollapsed ? `<div><p class="text-sm font-medium">Production Lead</p><p class="text-[10px] text-slate-500 uppercase">System Administrator</p></div>` : ''}
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col overflow-hidden">
+                        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10 shrink-0">
+                            <h2 className="text-lg font-semibold text-slate-800">{menuItems.find(i => i.id === activeView)?.label}</h2>
+                            <div className="flex items-center gap-4">
+                                <span className="text-xs font-medium text-slate-500 flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    Live Line Feed
+                                </span>
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50">
+                            <div className="max-w-7xl mx-auto">{children}</div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // INVENTORY VIEW COMPONENT (FULL)
+        // ============================================================
+        function InventoryView({ parts, onAddPart, onUpdatePart, onDeletePart }) {
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+            const [editingPart, setEditingPart] = useState(null);
+            const [formData, setFormData] = useState({
+                code: '', name: '', category: '', currentQty: 0, maxStock: 0,
+                alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support'
+            });
+
+            const lowStockParts = parts.filter(p => p.currentQty < (p.maxStock * (p.alertThreshold || 20) / 100));
+            const totalParts = parts.length;
+            const healthyPartsCount = totalParts - lowStockParts.length;
+            const lineEfficiency = totalParts > 0 ? ((healthyPartsCount / totalParts) * 100).toFixed(1) : '100.0';
+
+            const openAddModal = () => {
+                setEditingPart(null);
+                setFormData({ code: '', name: '', category: '', currentQty: 0, maxStock: 0, alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support' });
+                setIsModalOpen(true);
+                setIsDeleteConfirmOpen(false);
+            };
+
+            const openEditModal = (part) => {
+                setEditingPart(part);
+                setFormData({ ...part });
+                setIsModalOpen(true);
+                setIsDeleteConfirmOpen(false);
+            };
+
+            const handleFormSubmit = async (e) => {
+                e.preventDefault();
+                if (formData.currentQty > formData.maxStock) {
+                    alert("Error: Current Quantity cannot exceed Max Stock level.");
+                    return;
+                }
+                if (editingPart) {
+                    await onUpdatePart(editingPart.id, formData);
+                } else {
+                    await onAddPart(formData);
+                }
+                setIsModalOpen(false);
+            };
+
+            const confirmDelete = async () => {
+                if (editingPart) {
+                    await onDeletePart(editingPart.id);
+                    setIsDeleteConfirmOpen(false);
+                    setIsModalOpen(false);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Unique Parts</p>
+                            <p className="text-3xl font-bold text-slate-800 mt-1">{parts.length}</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                            <p className="text-red-400 text-[10px] font-bold uppercase tracking-wider">Need Replenish</p>
+                            <p className="text-3xl font-bold text-red-600 mt-1">{lowStockParts.length}</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Line Efficiency</p>
+                            <div className="flex items-baseline gap-2 mt-1">
+                                <p className={`text-3xl font-bold ${parseFloat(lineEfficiency) < 80 ? 'text-orange-500' : 'text-blue-600'}`}>{lineEfficiency}%</p>
+                                <span className="text-[10px] text-slate-400 font-medium">Stock Avail.</span>
+                            </div>
+                        </div>
+                        <div className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
+                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">C1/C2 Targets</p>
+                            <p className="text-3xl font-bold text-green-600 mt-1">15 Units</p>
                         </div>
                     </div>
-                </aside>
-            `;
-        }
 
-        function renderMain() {
-            const labels = { 'inventory': 'Part Control (Stock)', 'single-withdrawal': 'Urgent Supply', 'list-withdrawal': 'Prod. Master Plan', 'orders': 'Production Monitor' };
-            return `
-                <main class="flex-1 flex flex-col overflow-hidden">
-                    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-                        <h2 class="text-lg font-semibold text-slate-800">${labels[state.view]}</h2>
-                        <span class="text-xs font-medium text-slate-500 flex items-center gap-2">
-                            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>Live Line Feed
-                        </span>
-                    </header>
-                    <div class="flex-1 overflow-y-auto p-8 bg-slate-50/50"><div class="max-w-7xl mx-auto">${renderView()}</div></div>
-                </main>
-            `;
-        }
-
-        function renderView() {
-            if (state.view === 'inventory') return renderInventoryView();
-            if (state.view === 'single-withdrawal') return renderSingleWithdrawalView();
-            if (state.view === 'list-withdrawal') return renderListWithdrawalView();
-            if (state.view === 'orders') return renderOrdersView();
-            return '';
-        }
-
-        function renderInventoryView() {
-            const lowStock = state.parts.filter(p => p.currentQty < (p.maxStock * p.alertThreshold / 100));
-            return `
-                <div class="space-y-6">
-                    <div class="grid grid-cols-4 gap-6">
-                        ${[
-                    { label: 'Unique Parts', value: state.parts.length, icon: '📦', color: 'slate' },
-                    { label: 'Need Replenish', value: lowStock.length, icon: '⚠️', color: 'red' },
-                    { label: 'Line Efficiency', value: '98.2%', icon: '📊', color: 'blue' },
-                    { label: 'C1/C2 Targets', value: '15 Units', icon: '🎯', color: 'green' }
-                ].map(s => `
-                            <div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-                                <p class="text-${s.color}-400 text-[10px] font-bold uppercase tracking-wider">${s.label}</p>
-                                <p class="text-3xl font-bold text-${s.color}-600 mt-1">${s.value}</p>
+                    {/* Table */}
+                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-bold text-slate-800 text-lg">Inventory Status Monitor</h3>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Follow Prod. Master Schedule Plan</p>
                             </div>
-                        `).join('')}
-                    </div>
-                    <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                        <div class="p-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-                            <div><h3 class="font-bold text-slate-800 text-lg">Inventory Status Monitor</h3>
-                            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Follow Prod. Master Schedule Plan</p></div>
-                            <div class="flex gap-4">
-                                <input type="text" placeholder="Search code/model..." class="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
-                                <button onclick="openPartModal()" class="bg-gradient-to-b from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-md flex items-center gap-2">
-                                    <span class="text-lg leading-none">+</span> Register New Part
+                            <div className="flex gap-4">
+                                <input type="text" placeholder="Search code/model..." className="px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
+                                <button onClick={openAddModal} className="bg-gradient-to-b from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-md flex items-center gap-2">
+                                    <span className="text-lg leading-none">+</span> Register New Part
                                 </button>
                             </div>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left">
-                                <thead class="bg-white text-slate-400 text-[10px] uppercase tracking-widest border-b border-slate-100">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-white text-slate-400 text-[10px] uppercase tracking-widest border-b border-slate-100">
                                     <tr>
-                                        <th class="px-6 py-4 font-bold">Model / Grp</th>
-                                        <th class="px-6 py-4 font-bold">Part Info</th>
-                                        <th class="px-6 py-4 font-bold">Current Qty</th>
-                                        <th class="px-6 py-4 font-bold">Status</th>
-                                        <th class="px-6 py-4 font-bold text-center">Location</th>
-                                        <th class="px-6 py-4 font-bold text-right">Action</th>
+                                        <th className="px-6 py-4 font-bold">Model / Grp</th>
+                                        <th className="px-6 py-4 font-bold">Part Info</th>
+                                        <th className="px-6 py-4 font-bold">Current Qty</th>
+                                        <th className="px-6 py-4 font-bold">Status</th>
+                                        <th className="px-6 py-4 font-bold text-center">Location</th>
+                                        <th className="px-6 py-4 font-bold text-right">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-slate-100 bg-white">
-                                    ${state.parts.map(part => {
-                    const threshold = part.maxStock * part.alertThreshold / 100;
-                    const isLow = part.currentQty < threshold;
-                    const ratio = Math.min((part.currentQty / part.maxStock) * 100, 100);
-                    return `
-                                            <tr class="hover:bg-slate-50">
-                                                <td class="px-6 py-5"><div class="flex flex-col">
-                                                    <span class="text-sm font-bold text-blue-600">${part.modelTarget || 'ALL'}</span>
-                                                    <span class="text-[9px] text-slate-400 uppercase font-bold">${part.groupType}</span>
-                                                </div></td>
-                                                <td class="px-6 py-5"><div class="font-bold text-slate-800 text-sm">${part.name}</div>
-                                                <div class="text-[11px] text-slate-400">${part.code} • ${part.category}</div></td>
-                                                <td class="px-6 py-5"><div class="w-40">
-                                                    <div class="flex items-baseline gap-2">
-                                                        <span class="text-sm font-bold ${isLow ? 'text-red-600' : 'text-slate-800'}">${part.currentQty} ${part.unit}</span>
-                                                        <span class="text-[10px] text-slate-300">Max: ${part.maxStock}</span>
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                    {parts.map(part => {
+                                        const thresholdQty = part.maxStock * (part.alertThreshold || 20) / 100;
+                                        const isLow = part.currentQty < thresholdQty;
+                                        const ratio = Math.min((part.currentQty / part.maxStock) * 100, 100);
+                                        return (
+                                            <tr key={part.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-5 align-top">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-blue-600">{part.modelTarget || 'ALL'}</span>
+                                                        <span className="text-[9px] text-slate-400 uppercase font-bold mt-0.5">{part.groupType}</span>
                                                     </div>
-                                                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-1.5">
-                                                        <div class="h-full rounded-full ${isLow ? 'bg-red-500' : 'bg-green-500'}" style="width:${ratio}%"></div>
+                                                </td>
+                                                <td className="px-6 py-5 align-top">
+                                                    <div className="font-bold text-slate-800 text-sm">{part.name}</div>
+                                                    <div className="text-[11px] text-slate-400 mt-0.5">{part.code} • {part.category}</div>
+                                                </td>
+                                                <td className="px-6 py-5 align-top">
+                                                    <div className="flex flex-col gap-1.5 w-40">
+                                                        <div className="flex items-baseline gap-2">
+                                                            <span className={`text-sm font-bold ${isLow ? 'text-red-600' : 'text-slate-800'}`}>{part.currentQty} {part.unit}</span>
+                                                            <span className="text-[10px] text-slate-300">Max: {part.maxStock}</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all duration-700 ${isLow ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${ratio}%` }}></div>
+                                                        </div>
+                                                        <div className="text-[9px] text-slate-400 text-right">Alert @ {part.alertThreshold}% ({Math.round(thresholdQty)} {part.unit})</div>
                                                     </div>
-                                                    <div class="text-[9px] text-slate-400 text-right mt-1">Alert @ ${part.alertThreshold}% (${Math.round(threshold)} ${part.unit})</div>
-                                                </div></td>
-                                                <td class="px-6 py-5">
-                                                    <span class="px-3 py-1 ${isLow ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'} border text-[10px] font-bold rounded-full uppercase">${isLow ? 'REPLENISH' : 'STABLE'}</span>
                                                 </td>
-                                                <td class="px-6 py-5 text-center font-mono text-xs font-bold text-slate-500">${part.location}</td>
-                                                <td class="px-6 py-5 text-right">
-                                                    <button onclick="editPart('${part.id}')" class="text-slate-400 hover:text-blue-600 text-sm font-medium">Edit</button>
+                                                <td className="px-6 py-5 align-middle">
+                                                    {isLow ? (
+                                                        <span className="px-3 py-1 bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold rounded-full uppercase tracking-tight">REPLENISH</span>
+                                                    ) : (
+                                                        <span className="px-3 py-1 bg-green-50 border border-green-100 text-green-600 text-[10px] font-bold rounded-full uppercase tracking-tight">STABLE</span>
+                                                    )}
                                                 </td>
-                            </tr>
-                                        `;
-                }).join('')}
+                                                <td className="px-6 py-5 align-middle text-center font-mono text-xs font-bold text-slate-500">{part.location}</td>
+                                                <td className="px-6 py-5 align-middle text-right">
+                                                    <button onClick={() => openEditModal(part)} className="text-slate-400 hover:text-blue-600 text-sm font-medium transition-colors">Edit</button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                </div>
-            `;
-        }
 
-        function renderSingleWithdrawalView() {
-            return `
-                <div class="space-y-6 max-w-4xl mx-auto">
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
-                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                            <h3 class="text-lg font-bold text-slate-800">Quick Withdrawal</h3>
-                            <p class="text-xs text-slate-500">Deduct stock for a single item immediately.</p>
-                        </div>
-                        <form onsubmit="handleQuickWithdrawal(event)" class="p-6">
-                            <div class="flex gap-4 items-end">
-                                <div class="flex-grow">
-                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Select Part</label>
-                                    <select id="quickPart" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
-                                        <option value="">Choose a part...</option>
-                                        ${state.parts.map(p => `<option value="${p.id}">${p.code} - ${p.name} (Stock: ${p.currentQty})</option>`).join('')}
-                                    </select>
-                                </div>
-                                <div class="w-32">
-                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Quantity</label>
-                                    <input type="number" id="quickQty" min="1" value="1" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-center" required />
-                                </div>
-                                <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md">Confirm</button>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
-                        <div class="px-6 py-4 border-b border-slate-100">
-                            <h3 class="font-bold text-slate-800">Withdrawal Logs</h3>
-                            <p class="text-xs text-slate-500">History of urgent supply requests</p>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left">
-                                <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase">
-                                    <tr>${['Timestamp', 'Part Info', 'Quantity', 'Requested By', 'Status'].map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100">
-                                    ${state.withdrawalHistory.map(r => `
-                                        <tr class="hover:bg-slate-50">
-                                            <td class="px-6 py-3 text-xs text-slate-500 font-mono">${new Date(r.timestamp).toLocaleString()}</td>
-                                            <td class="px-6 py-3"><div class="text-sm font-bold text-slate-700">${r.partName}</div><div class="text-[10px] text-slate-400">${r.partCode}</div></td>
-                                            <td class="px-6 py-3"><span class="bg-slate-100 px-2 py-1 rounded text-xs font-bold font-mono">-${r.quantity}</span></td>
-                                            <td class="px-6 py-3 text-xs text-slate-600">${r.withdrawnBy}</td>
-                                            <td class="px-6 py-3"><span class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full uppercase">${r.status}</span></td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderListWithdrawalView() {
-            return `
-                <div class="space-y-6">
-                    <div class="flex justify-between items-center">
-                        <div><h3 class="text-2xl font-bold text-slate-800">Production Master Plan</h3>
-                        <p class="text-slate-500 text-sm">Manage withdrawal templates (BOM) for daily production.</p></div>
-                        <button onclick="openTemplateModal()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2">
-                            <span>+</span> Create New Template
-                        </button>
-                    </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
-                        <table class="w-full text-left">
-                            <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase border-b border-slate-100">
-                                <tr>${['Template Name', 'Target Model', 'Total Items', 'Last Updated', 'Actions'].map(h => `<th class="px-6 py-4 font-bold">${h}</th>`).join('')}</tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                ${state.templates.map(tpl => `
-                                    <tr class="hover:bg-slate-50">
-                                        <td class="px-6 py-4"><span class="font-bold text-slate-800">${tpl.name}</span></td>
-                                        <td class="px-6 py-4"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-bold border border-blue-100">${tpl.targetModel}</span></td>
-                                        <td class="px-6 py-4 text-sm text-slate-600">${tpl.items.length} Parts</td>
-                                        <td class="px-6 py-4 text-xs text-slate-400">${new Date(tpl.updatedAt).toLocaleDateString()}</td>
-                                        <td class="px-6 py-4"><div class="flex gap-2 justify-end">
-                                            <button onclick="editTemplate('${tpl.id}')" class="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded text-xs font-bold border border-slate-200">Edit</button>
-                                            <button onclick="submitTemplate('${tpl.id}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold shadow-md">Submit</button>
-                                        </div></td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderOrdersView() {
-            const stages = [{ id: 'PART_CONTROL', label: 'Control' }, { id: 'PART_SUPPLY', label: 'Supply' }, { id: 'PROD_ASSY', label: 'Assy' }, { id: 'AGING', label: 'Aging' }, { id: 'FINAL', label: 'Final' }, { id: 'COMPLETED', label: 'Completed' }];
-            return `
-                <div class="space-y-6">
-                    <div><h3 class="text-xl font-bold text-slate-800">Follow Prod. Master Schedule Plan</h3>
-                    <p class="text-sm text-slate-500">Real-time status of line target installation</p></div>
-                    <div class="grid gap-6">
-                        ${state.orders.map(order => {
-                const isCancelled = order.status === 'CANCELLED';
-                const activeStatus = isCancelled ? order.previousStatus : order.status;
-                return `
-                                <div class="bg-white rounded-2xl shadow-sm border ${isCancelled ? 'border-red-100 opacity-90' : 'border-slate-200'}">
-                                    <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-                                        <div class="flex items-center gap-4">
-                                            <div class="px-3 py-1 rounded text-xs font-bold ${isCancelled ? 'bg-slate-200 text-slate-500' : 'bg-blue-600 text-white'}">${order.targetModel || 'N/A'}</div>
-                                            <div><h4 class="font-bold ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-800'}">${order.orderNo}</h4>
-                                            <p class="text-[10px] text-slate-400 uppercase">${order.requestedBy}</p></div>
+                    {/* Modal */}
+                    {isModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden relative">
+                                {isDeleteConfirmOpen && (
+                                    <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center p-8 text-center">
+                                        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                                            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                         </div>
-                                        <div class="flex-1 max-w-2xl px-8 hidden md:block">
-                                            <div class="relative flex justify-between">
-                                                <div class="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2"></div>
-                                                ${stages.map((stage, idx) => {
-                    const isActive = activeStatus === stage.id;
-                    const currentIdx = stages.findIndex(s => s.id === activeStatus);
-                    const isPast = currentIdx > idx;
-                    let bubbleClass = 'bg-white border-2 border-slate-200 text-slate-400';
-                    let textClass = 'text-slate-400';
-                    if (isActive) {
-                        if (isCancelled) {
-                            bubbleClass = 'bg-red-500 text-white ring-4 ring-red-100 scale-125';
-                            textClass = 'text-red-500';
-                        } else {
-                            bubbleClass = 'bg-blue-600 text-white ring-4 ring-blue-100 scale-125';
-                            textClass = 'text-blue-600';
-                        }
-                    } else if (isPast) {
-                        bubbleClass = 'bg-green-500 text-white';
-                        textClass = 'text-green-600';
-                    }
-                    return `
-                                                        <button onclick="${!isCancelled && order.status !== 'COMPLETED' ? `updateOrderStatus('${order.id}','${stage.id}')` : 'void(0)'}" 
-                                                            ${isCancelled || order.status === 'COMPLETED' ? 'disabled' : ''}
-                                                            class="relative z-10 flex flex-col items-center cursor-pointer disabled:cursor-not-allowed">
-                                                            <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${bubbleClass}">${isPast ? '✓' : idx + 1}</div>
-                                                            <span class="text-[10px] mt-2 font-bold uppercase ${textClass}">${stage.label}</span>
-                                                        </button>
-                                                    `;
-                }).join('')}
-                                            </div>
+                                        <h4 className="text-xl font-bold text-slate-800 mb-2">Delete this part?</h4>
+                                        <p className="text-sm text-slate-500 mb-6">This action cannot be undone. The part "{editingPart?.name}" will be permanently removed.</p>
+                                        <div className="flex gap-3 w-full max-w-xs">
+                                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                            <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200">Yes, Delete</button>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                    <h3 className="text-lg font-bold text-slate-800">{editingPart ? 'Update Part Information' : 'Register New Part'}</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                        <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                                    </button>
+                                </div>
+                                <form onSubmit={handleFormSubmit} className="p-8 space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Target Model</label>
+                                            <input type="text" required value={formData.modelTarget} onChange={(e) => setFormData({ ...formData, modelTarget: e.target.value })} placeholder="e.g. MF55, SF50" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
                                         </div>
                                         <div>
-                                            ${isCancelled ? `
-                                                <div class="text-right"><div class="px-3 py-1 bg-red-100 text-red-700 rounded border border-red-200 text-xs font-bold">CANCELLED</div>
-                                                ${order.previousStatus ? `<p class="text-[9px] text-red-400 font-bold mt-1">During: ${stages.find(s => s.id === order.previousStatus)?.label || 'Processing'}</p>` : ''}</div>
-                                            ` : (order.status !== 'COMPLETED' ? `
-                                                <button onclick="openCancelOrderModal('${order.id}')" class="px-3 py-1.5 border border-red-200 text-red-500 hover:bg-red-50 rounded text-xs font-bold">Cancel</button>
-                                            ` : '')}
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Group Type</label>
+                                            <select value={formData.groupType} onChange={(e) => setFormData({ ...formData, groupType: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium">
+                                                <option value="Prep Support">Prep Support</option>
+                                                <option value="Single Assy">Single Assy</option>
+                                            </select>
                                         </div>
                                     </div>
-                                    <div class="p-5 ${isCancelled ? 'bg-red-50/20' : 'bg-slate-50/30'}">
-                                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                            ${order.items.map(item => `
-                                                <div class="flex justify-between items-center bg-white p-3 rounded-lg border shadow-sm">
-                                                    <div class="flex flex-col overflow-hidden mr-2">
-                                                        <span class="text-xs font-bold truncate ${isCancelled ? 'text-slate-500' : 'text-slate-700'}">${item.part?.name || 'Unknown'}</span>
-                                                        <span class="text-[10px] text-slate-400">${item.part?.code} • ${item.part?.groupType || 'General'}</span>
-                                                    </div>
-                                                    <span class="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">x ${item.quantity}</span>
-                                                </div>
-                                            `).join('')}
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Part Identity (Code & Name)</label>
+                                        <div className="flex gap-3">
+                                            <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} placeholder="P000" className="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                            <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Full component name" className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
+                                            <input type="text" value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} placeholder="Unit" className="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
                                         </div>
                                     </div>
-                                </div>
-                            `;
-            }).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderModals() {
-            return `
-                ${state.modals.partForm ? renderPartModal() : ''}
-                ${state.modals.stockWarning ? renderStockWarningModal() : ''}
-                ${state.modals.templateForm ? renderTemplateModal() : ''}
-                ${state.modals.templateSubmitConfirm ? renderTemplateSubmitConfirmModal() : ''}
-                ${state.modals.templateStockErrors.length > 0 ? renderTemplateStockErrorModal() : ''}
-                ${state.modals.orderCancelConfirm ? renderOrderCancelConfirmModal() : ''}
-            `;
-        }
-
-        // === MODAL RENDERS ===
-        function renderPartModal() {
-            const isEdit = !!state.modals.partFormEditing;
-            const part = isEdit ? state.parts.find(p => p.id === state.modals.partFormEditing) : state.partFormData;
-            return `
-                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in">
-                        
-                        ${state.modals.partDeleteConfirm ? `
-                            <div class="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
-                                <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </div>
-                                <h4 class="text-xl font-bold text-slate-800 mb-2">Delete this part?</h4>
-                                <p class="text-sm text-slate-500 mb-6">This action cannot be undone. The part "${part?.name}" will be permanently removed from inventory.</p>
-                                <div class="flex gap-3 w-full max-w-xs">
-                                    <button onclick="cancelDeletePart()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
-                                    <button onclick="performDeletePart()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200">Yes, Delete</button>
-                                </div>
-                            </div>
-                        ` : ''}
-
-                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                            <h3 class="text-lg font-bold text-slate-800">${isEdit ? 'Update Part Information' : 'Register New Part'}</h3>
-                            <button onclick="closePartModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </button>
-                        </div>
-                        <form onsubmit="handlePartFormSubmit(event)" class="p-8 space-y-6 bg-white">
-                            <div class="grid grid-cols-2 gap-6">
-                                <div class="col-span-1">
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Target Model</label>
-                                    <input type="text" id="partModelTarget" value="${part?.modelTarget || ''}" placeholder="e.g. MF55, SF50" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
-                                    <p class="text-[9px] text-slate-400 mt-1">Accepts multiple models (comma separated)</p>
-                                </div>
-                                <div class="col-span-1">
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Group Type</label>
-                                    <select id="partGroupType" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium">
-                                        <option value="Prep Support" ${part?.groupType === 'Prep Support' ? 'selected' : ''}>Prep Support</option>
-                                        <option value="Single Assy" ${part?.groupType === 'Single Assy' ? 'selected' : ''}>Single Assy</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Part Identity (Code & Name)</label>
-                                <div class="flex gap-3">
-                                    <input type="text" id="partCode" value="${part?.code || ''}" placeholder="P000" required class="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
-                                    <input type="text" id="partName" value="${part?.name || ''}" placeholder="Full component name" required class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
-                                    <input type="text" id="partUnit" value="${part?.unit || 'pcs'}" placeholder="Unit" class="w-24 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
-                                </div>
-                            </div>
-
-                            <div class="p-4 border border-blue-100 bg-blue-50/30 rounded-xl">
-                                <div class="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Current</label>
-                                        <input type="number" id="partCurrentQty" value="${part?.currentQty || 0}" min="0" required class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                    <div className="p-4 border border-blue-100 bg-blue-50/30 rounded-xl">
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Current</label>
+                                                <input type="number" required min="0" value={formData.currentQty} onChange={(e) => setFormData({ ...formData, currentQty: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Max (Capacity)</label>
+                                                <input type="number" required min="1" value={formData.maxStock} onChange={(e) => setFormData({ ...formData, maxStock: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-blue-500 uppercase mb-1.5">Alert Limit (%)</label>
+                                                <input type="number" required min="1" max="100" value={formData.alertThreshold} onChange={(e) => setFormData({ ...formData, alertThreshold: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-blue-700" />
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <p className="text-[10px] text-blue-400 font-medium">Auto-alert when stock drops below {formData.alertThreshold}% ({Math.round(formData.maxStock * formData.alertThreshold / 100)} {formData.unit})</p>
+                                            {formData.currentQty > formData.maxStock && <p className="text-[10px] text-red-500 font-bold animate-pulse">Warning: Current &gt; Max</p>}
+                                        </div>
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Max (Capacity)</label>
-                                        <input type="number" id="partMaxStock" value="${part?.maxStock || 0}" min="1" required class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-slate-700" />
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Warehouse Location</label>
+                                        <input type="text" required value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} placeholder="e.g. A-101" className="w-2/3 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-blue-500 uppercase mb-1.5">Alert Limit (%)</label>
-                                        <input type="number" id="partAlertThreshold" value="${part?.alertThreshold || 20}" min="1" max="100" required class="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-blue-700" />
+                                    <div className="pt-4 flex gap-4 border-t border-slate-50 mt-2 items-center">
+                                        {editingPart && (
+                                            <button type="button" onClick={() => setIsDeleteConfirmOpen(true)} className="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition-colors" title="Delete Part">
+                                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        )}
+                                        <div className="flex-1 flex gap-4">
+                                            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm hover:bg-slate-50">Discard</button>
+                                            <button type="submit" className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200">{editingPart ? 'Save Updates' : 'Confirm Registration'}</button>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="flex justify-between items-center mt-2">
-                                    <p class="text-[10px] text-blue-400 font-medium">Auto-alert when stock drops below ${part?.alertThreshold || 20}% (${Math.round(((part?.maxStock || 0) * (part?.alertThreshold || 20) / 100))} ${part?.unit || 'pcs'})</p>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Warehouse Location</label>
-                                <input type="text" id="partLocation" value="${part?.location || ''}" placeholder="e.g. A-101" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" />
-                            </div>
-
-                            <div class="pt-4 flex gap-4 border-t border-slate-50 mt-2 items-center">
-                                ${isEdit ? `
-                                    <button type="button" onclick="confirmDeletePart()" class="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition-colors" title="Delete Part">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                ` : ''}
-                                <div class="flex-1 flex gap-4">
-                                    <button type="button" onclick="closePartModal()" class="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm hover:bg-slate-50 transition-all">Discard</button>
-                                    <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all">
-                                        ${isEdit ? 'Save Updates' : 'Confirm Registration'}
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderStockWarningModal() {
-            const { part, qty } = state.modals.stockWarningData || {};
-            return `
-                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 p-4 flex items-center justify-center animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in zoom-in">
-                        <div class="p-6">
-                            <div class="flex items-start gap-4">
-                                <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-2xl shrink-0">⚠️</div>
-                                <div class="flex-1">
-                                    <h4 class="font-bold text-slate-800 mb-2">Low Stock Warning</h4>
-                                    <p class="text-sm text-slate-600 mb-4">Withdrawing <strong>${qty} ${part?.unit}</strong> of <strong>${part?.name}</strong> will bring stock below alert threshold.</p>
-                                    <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
-                                        <div class="flex justify-between"><span class="text-slate-500">Current Stock</span><span class="font-bold">${part?.currentQty} ${part?.unit}</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">After Withdrawal</span><span class="font-bold text-red-600">${(part?.currentQty || 0) - (qty || 0)} ${part?.unit}</span></div>
-                                        <div class="flex justify-between"><span class="text-slate-500">Alert Threshold</span><span class="font-bold">${Math.round((part?.maxStock || 0) * (part?.alertThreshold || 0) / 100)} ${part?.unit}</span></div>
-                                    </div>
-                                    <div class="flex gap-3 justify-end mt-4">
-                                        <button onclick="closeStockWarning()" class="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg font-bold text-sm">Cancel</button>
-                                        <button onclick="proceedWithWarning()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-sm">Proceed Anyway</button>
-                                    </div>
-                                </div>
+                                </form>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
-            `;
+            );
         }
 
-        function renderTemplateModal() {
-            const isEdit = !!state.modals.templateFormEditing;
-            const tpl = isEdit ? state.templates.find(t => t.id === state.modals.templateFormEditing) : state.templateFormData;
-            const filtered = state.templateFormData.searchTerm ?
-                state.parts.filter(p => p.name.toLowerCase().includes(state.templateFormData.searchTerm.toLowerCase()) ||
-                    p.code.toLowerCase().includes(state.templateFormData.searchTerm.toLowerCase())) : state.parts;
-            return `
-                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col overflow-hidden animate-in zoom-in relative">
-                        
-                        ${state.modals.templateDeleteConfirm ? `
-                            <div class="absolute inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
-                                <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </div>
-                                <h4 class="text-xl font-bold text-slate-800 mb-2">Delete this Template?</h4>
-                                <p class="text-sm text-slate-500 mb-6">This action cannot be undone. The template "${tpl?.name}" will be removed.</p>
-                                <div class="flex gap-3 w-full max-w-xs">
-                                    <button onclick="cancelDeleteTemplate()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
-                                    <button onclick="performDeleteTemplate()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200">Yes, Delete</button>
-                                </div>
+        // ============================================================
+        // WITHDRAWAL VIEW (FULL - Single & List Mode)
+        // ============================================================
+        function WithdrawalView({ parts, onWithdraw, onCreateOrder, type }) {
+            const [loading, setLoading] = useState(false);
+            const [successMsg, setSuccessMsg] = useState(null);
+            // Single
+            const [selectedPart, setSelectedPart] = useState(null);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const [qty, setQty] = useState(1);
+            const [history, setHistory] = useState([]);
+            const [showStockWarning, setShowStockWarning] = useState(false);
+            const dropdownRef = useRef(null);
+            // List
+            const [templates, setTemplates] = useState([]);
+            const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+            const [editingTemplateId, setEditingTemplateId] = useState(null);
+            const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+            const [submitTargetTemplate, setSubmitTargetTemplate] = useState(null);
+            const [submitErrors, setSubmitErrors] = useState([]);
+            const [tplName, setTplName] = useState('');
+            const [tplTarget, setTplTarget] = useState('');
+            const [tplItems, setTplItems] = useState([]);
+            const [tplSearchTerm, setTplSearchTerm] = useState('');
+
+            useEffect(() => {
+                if (type === 'single') {
+                    api.getWithdrawalHistory().then(setHistory);
+                } else {
+                    api.getTemplates().then(setTemplates);
+                }
+            }, [type, loading]);
+
+            useEffect(() => {
+                if (successMsg) {
+                    const timer = setTimeout(() => setSuccessMsg(null), 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [successMsg]);
+
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                        setIsDropdownOpen(false);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            const handleSingleSubmit = async (e) => {
+                e.preventDefault();
+                if (!selectedPart) return;
+                if (qty > selectedPart.currentQty) {
+                    setShowStockWarning(true);
+                    return;
+                }
+                setLoading(true);
+                try {
+                    await onWithdraw(selectedPart.id, qty);
+                    setSelectedPart(null);
+                    setSearchTerm('');
+                    setQty(1);
+                    setSuccessMsg(`Successfully withdrew ${qty} ${selectedPart.unit} of ${selectedPart.name}`);
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleExportCSV = () => {
+                if (history.length === 0) { alert("No data to export"); return; }
+                const headers = ['Timestamp', 'Part Name', 'Part Code', 'Quantity', 'Requested By', 'Status'];
+                const rows = history.map(h => [
+                    new Date(h.timestamp).toLocaleString().replace(',', ''),
+                    `"${h.partName.replace(/"/g, '""')}"`, h.partCode, h.quantity, h.withdrawnBy, h.status
+                ]);
+                const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', `withdrawal_history.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const openTemplateModal = (template) => {
+                if (template) {
+                    setEditingTemplateId(template.id);
+                    setTplName(template.name);
+                    setTplTarget(template.targetModel);
+                    setTplItems(template.items);
+                } else {
+                    setEditingTemplateId(null);
+                    setTplName('');
+                    setTplTarget('');
+                    setTplItems([]);
+                }
+                setTplSearchTerm('');
+                setIsDeleteConfirmOpen(false);
+                setIsTemplateModalOpen(true);
+            };
+
+            const addItemToTemplate = (partId) => {
+                const existing = tplItems.find(i => i.partId === partId);
+                if (existing) {
+                    setTplItems(tplItems.map(i => i.partId === partId ? { ...i, quantity: i.quantity + 1 } : i));
+                } else {
+                    setTplItems([...tplItems, { partId, quantity: 1 }]);
+                }
+            };
+
+            const removeItemFromTemplate = (partId) => {
+                setTplItems(tplItems.filter(i => i.partId !== partId));
+            };
+
+            const updateItemQty = (partId, val) => {
+                setTplItems(tplItems.map(i => i.partId === partId ? { ...i, quantity: val } : i));
+            };
+
+            const saveTemplate = async () => {
+                if (!tplName || tplItems.length === 0) return;
+                setLoading(true);
+                try {
+                    const payload = { name: tplName, targetModel: tplTarget || 'ALL', items: tplItems };
+                    if (editingTemplateId) {
+                        await api.updateTemplate(editingTemplateId, payload);
+                    } else {
+                        await api.saveTemplate(payload);
+                    }
+                    setIsTemplateModalOpen(false);
+                    api.getTemplates().then(setTemplates);
+                    setSuccessMsg('Template saved successfully');
+                } catch (err) {
+                    alert('Failed to save template');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const confirmDeleteTemplate = async () => {
+                if (!editingTemplateId) return;
+                setLoading(true);
+                try {
+                    await api.deleteTemplate(editingTemplateId);
+                    setIsTemplateModalOpen(false);
+                    api.getTemplates().then(setTemplates);
+                    setSuccessMsg('Template deleted successfully');
+                } catch (err) {
+                    alert('Failed to delete template');
+                } finally {
+                    setLoading(false);
+                    setIsDeleteConfirmOpen(false);
+                }
+            };
+
+            const initiateSubmit = (template) => {
+                const errors = [];
+                for (const item of template.items) {
+                    const part = parts.find(p => p.id === item.partId);
+                    if (part && part.currentQty < item.quantity) {
+                        errors.push(`${part.name} (Need: ${item.quantity}, Stock: ${part.currentQty})`);
+                    } else if (!part) {
+                        errors.push(`Unknown Part ID: ${item.partId}`);
+                    }
+                }
+                if (errors.length > 0) {
+                    setSubmitErrors(errors);
+                } else {
+                    setSubmitTargetTemplate(template);
+                }
+            };
+
+            const confirmSubmit = async () => {
+                if (!submitTargetTemplate) return;
+                setLoading(true);
+                try {
+                    await onCreateOrder(`Job: ${submitTargetTemplate.name}`, submitTargetTemplate.items, submitTargetTemplate.targetModel);
+                    setSuccessMsg(`Combined Job "${submitTargetTemplate.name}" created! Supply Slip generated.`);
+                } catch (err) {
+                    alert(`Error: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                    setSubmitTargetTemplate(null);
+                }
+            };
+
+            const filteredParts = parts.filter(p => {
+                const term = searchTerm.toLowerCase();
+                return p.name.toLowerCase().includes(term) || p.code.toLowerCase().includes(term) || (p.modelTarget && p.modelTarget.toLowerCase().includes(term));
+            });
+
+            const templateCatalogParts = parts.filter(p => {
+                const term = tplSearchTerm.toLowerCase();
+                return p.name.toLowerCase().includes(term) || p.code.toLowerCase().includes(term) || (p.modelTarget && p.modelTarget.toLowerCase().includes(term));
+            });
+
+            // SINGLE MODE
+            if (type === 'single') {
+                return (
+                    <div className="space-y-6 max-w-4xl mx-auto relative">
+                        {successMsg && (
+                            <div className="absolute top-0 left-0 right-0 -mt-12 bg-green-500 text-white text-center py-2 rounded-lg shadow-lg font-bold z-50">
+                                {successMsg}
                             </div>
-                        ` : ''}
-
-                        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
-                            <h3 class="text-lg font-bold text-slate-800">${isEdit ? 'Edit Withdrawal Template' : 'Create New Template'}</h3>
-                            <button onclick="closeTemplateModal()" class="text-slate-400 hover:text-slate-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="flex-1 flex overflow-hidden">
-                            <!-- Left: BOM / Configuration -->
-                            <div class="w-1/2 p-6 border-r border-slate-100 flex flex-col overflow-y-auto bg-slate-50/50">
-                                <div class="space-y-4 mb-6">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Template Name</label>
-                                        <input type="text" id="tplName" value="${tpl?.name || ''}" placeholder="e.g. Daily Run C1" class="w-full px-4 py-2 border rounded-lg text-sm" />
-                                    </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Model</label>
-                                        <input type="text" id="tplModel" value="${tpl?.targetModel || ''}" placeholder="e.g. MF55" class="w-full px-4 py-2 border rounded-lg text-sm" />
-                                    </div>
-                                </div>
-
-                                <div class="flex-1">
-                                    <div class="flex justify-between items-end mb-2">
-                                        <label class="block text-[10px] font-bold text-slate-500 uppercase">Withdrawal List (BOM)</label>
-                                        <span class="text-xs font-bold text-blue-600">${state.templateFormData.items.length} items selected</span>
-                                    </div>
-                                    <div class="bg-white border border-slate-200 rounded-xl overflow-hidden min-h-[200px]">
-                                        ${state.templateFormData.items.length === 0 ? `
-                                            <div class="p-8 text-center text-slate-400 text-sm">Select parts from the catalog on the right</div>
-                                        ` : `
-                                            <div class="divide-y divide-slate-100">
-                                                ${state.templateFormData.items.map((item, idx) => {
-                const part = state.parts.find(p => p.id === item.partId);
-                return `
-                                                        <div class="p-3 flex items-center justify-between hover:bg-slate-50">
-                                                            <div class="flex-1">
-                                                                <div class="text-sm font-bold text-slate-800">${part?.name}</div>
-                                                                <div class="text-[10px] text-slate-400">${part?.code}</div>
-                                                            </div>
-                                                            <div class="flex items-center gap-3">
-                                                                <input type="number" min="1" value="${item.quantity}" oninput="updateTemplateItemQty(${idx}, this.value)" class="w-16 px-2 py-1 border rounded text-center text-sm font-bold" />
-                                                                <button onclick="removePartFromTemplate(${idx})" class="text-red-400 hover:text-red-600 p-1">&times;</button>
+                        )}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible z-20 relative">
+                            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                                <h3 className="text-lg font-bold text-slate-800">Quick Withdrawal</h3>
+                                <p className="text-xs text-slate-500">Deduct stock for a single item immediately.</p>
+                            </div>
+                            <form onSubmit={handleSingleSubmit} className="p-6">
+                                <div className="flex flex-col md:flex-row gap-4 items-end">
+                                    <div className="flex-grow relative" ref={dropdownRef}>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Search & Select Part</label>
+                                        <div className="relative">
+                                            <input type="text" placeholder="Type Name, Code or Model..." value={searchTerm}
+                                                onChange={(e) => { setSearchTerm(e.target.value); setIsDropdownOpen(true); setSelectedPart(null); }}
+                                                onFocus={() => setIsDropdownOpen(true)}
+                                                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white" />
+                                            {selectedPart && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 font-bold text-lg">✓</div>}
+                                        </div>
+                                        {isDropdownOpen && (
+                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                                {filteredParts.length === 0 ? (
+                                                    <div className="px-4 py-3 text-sm text-slate-400">No parts found matching "{searchTerm}"</div>
+                                                ) : (
+                                                    filteredParts.map(p => (
+                                                        <div key={p.id} onClick={() => { setSelectedPart(p); setSearchTerm(`${p.code} - ${p.name}`); setIsDropdownOpen(false); }}
+                                                            className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0">
+                                                            <div className="flex justify-between items-center">
+                                                                <div>
+                                                                    <div className="font-bold text-slate-700 text-sm">{p.name}</div>
+                                                                    <div className="text-xs text-slate-400">{p.code} • Model: {p.modelTarget || 'Any'}</div>
+                                                                </div>
+                                                                <div className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded">Stock: {p.currentQty}</div>
                                                             </div>
                                                         </div>
-                                                    `;
-            }).join('')}
+                                                    ))
+                                                )}
                                             </div>
-                                        `}
+                                        )}
+                                    </div>
+                                    <div className="w-full md:w-32">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Quantity</label>
+                                        <input type="number" min="1" value={qty} onChange={(e) => setQty(parseInt(e.target.value))}
+                                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-slate-50 text-center" required />
+                                    </div>
+                                    <div className="w-full md:w-48">
+                                        <button type="submit" disabled={loading || !selectedPart}
+                                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg shadow-md shadow-blue-200 transition-all disabled:opacity-50 text-sm h-[42px]">
+                                            {loading ? 'Processing...' : 'Confirm'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        {showStockWarning && selectedPart && (
+                            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+                                <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                                    <div className="flex items-center gap-3 text-red-600 mb-4">
+                                        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        <h3 className="text-lg font-bold">Insufficient Stock</h3>
+                                    </div>
+                                    <p className="text-slate-600 text-sm mb-4">
+                                        You requested <strong>{qty}</strong> {selectedPart.unit}, but only <strong>{selectedPart.currentQty}</strong> {selectedPart.unit} are available for <strong>{selectedPart.name}</strong>.
+                                    </p>
+                                    <div className="flex justify-end">
+                                        <button onClick={() => setShowStockWarning(false)} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-800">Close & Adjust</button>
                                     </div>
                                 </div>
                             </div>
-
-                            <!-- Right: Part Catalog -->
-                            <div class="w-1/2 p-6 flex flex-col overflow-hidden bg-white">
-                                <div class="mb-4">
-                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">Part Catalog</label>
-                                    <input type="text" oninput="updateTemplateSearch(this.value)" value="${state.templateFormData.searchTerm}" placeholder="Search by Name or Model..." class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                        )}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
+                            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Withdrawal Logs</h3>
+                                    <p className="text-xs text-slate-500">History of urgent supply requests</p>
                                 </div>
-                                <div class="flex-1 overflow-y-auto pr-2 space-y-2">
-                                    ${filtered.map(part => {
-                const inCart = state.templateFormData.items.some(i => i.partId === part.id);
-                return `
-                                            <div class="p-3 border rounded-lg flex justify-between items-center transition-all ${inCart ? 'border-blue-200 bg-blue-50' : 'border-slate-100 hover:border-blue-300'}">
-                                                <div>
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="text-xs font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">${part.modelTarget || 'ALL'}</span>
-                                                        <span class="text-sm font-bold text-slate-800">${part.name}</span>
-                                                    </div>
-                                                    <div class="text-xs text-slate-500 mt-1">${part.code} • Stock: ${part.currentQty}</div>
+                                <button onClick={handleExportCSV} className="text-blue-600 text-xs font-bold hover:underline hover:text-blue-800">Export CSV</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+                                        <tr>
+                                            <th className="px-6 py-3 font-semibold">Timestamp</th>
+                                            <th className="px-6 py-3 font-semibold">Part Info</th>
+                                            <th className="px-6 py-3 font-semibold">Quantity</th>
+                                            <th className="px-6 py-3 font-semibold">Requested By</th>
+                                            <th className="px-6 py-3 font-semibold text-right">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {history.map(record => (
+                                            <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-3 text-xs text-slate-500 font-mono">{new Date(record.timestamp).toLocaleString()}</td>
+                                                <td className="px-6 py-3">
+                                                    <div className="text-sm font-bold text-slate-700">{record.partName}</div>
+                                                    <div className="text-xs text-slate-400">{record.partCode}</div>
+                                                </td>
+                                                <td className="px-6 py-3 text-sm font-bold text-blue-600">{record.quantity}</td>
+                                                <td className="px-6 py-3 text-sm text-slate-600">{record.withdrawnBy}</td>
+                                                <td className="px-6 py-3 text-right"><span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded">{record.status}</span></td>
+                                            </tr>
+                                        ))}
+                                        {history.length === 0 && (
+                                            <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">No withdrawal history yet</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // LIST MODE
+            return (
+                <div className="space-y-6 relative">
+                    {successMsg && (
+                        <div className="absolute top-0 left-0 right-0 -mt-12 bg-green-500 text-white text-center py-2 rounded-lg shadow-lg font-bold z-50">{successMsg}</div>
+                    )}
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">Master Templates</h2>
+                            <p className="text-sm text-slate-500">Pre-defined bundles for production jobs</p>
+                        </div>
+                        <button onClick={() => openTemplateModal(null)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg shadow-md flex items-center gap-2">
+                            <span className="text-lg">+</span> New Template
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {templates.map(tpl => (
+                            <div key={tpl.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all">
+                                <div className="p-5 border-b border-slate-100 bg-gradient-to-br from-blue-50 to-white">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-bold text-slate-800 text-lg">{tpl.name}</h3>
+                                        <button onClick={() => openTemplateModal(tpl)} className="text-slate-400 hover:text-blue-600">
+                                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-500">Target: <span className="font-bold text-blue-600">{tpl.targetModel}</span></p>
+                                </div>
+                                <div className="p-4">
+                                    <div className="space-y-2 mb-4">
+                                        {tpl.items.map((item, idx) => {
+                                            const part = parts.find(p => p.id === item.partId);
+                                            return part ? (
+                                                <div key={idx} className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-700">{part.code}</span>
+                                                    <span className="font-bold text-slate-800">×{item.quantity}</span>
                                                 </div>
-                                                <button onclick="addPartToTemplate('${part.id}')" ${inCart ? 'disabled' : ''} class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${inCart ? 'bg-blue-200 text-blue-600' : 'bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white'}">
-                                                    ${inCart ? '✓' : '+'}
-                                                </button>
+                                            ) : null;
+                                        })}
+                                    </div>
+                                    <button onClick={() => initiateSubmit(tpl)} disabled={loading}
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg shadow-md disabled:opacity-50 text-sm">
+                                        {loading ? 'Processing...' : 'Submit to Production'}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {templates.length === 0 && (
+                            <div className="col-span-full text-center py-12 text-slate-400">
+                                <p className="text-lg font-bold">No templates yet</p>
+                                <p className="text-sm">Create your first template to get started</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Template Modal */}
+                    {isTemplateModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative">
+                                {isDeleteConfirmOpen && (
+                                    <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center p-8 text-center">
+                                        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                                            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </div>
+                                        <h4 className="text-xl font-bold text-slate-800 mb-2">Delete this template?</h4>
+                                        <p className="text-sm text-slate-500 mb-6">This action cannot be undone.</p>
+                                        <div className="flex gap-3 w-full max-w-xs">
+                                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                            <button onClick={confirmDeleteTemplate} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700">Yes, Delete</button>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+                                    <h3 className="text-lg font-bold text-slate-800">{editingTemplateId ? 'Edit Template' : 'Create New Template'}</h3>
+                                    <button onClick={() => setIsTemplateModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                        <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                                    </button>
+                                </div>
+                                <div className="p-8 space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Template Name</label>
+                                            <input type="text" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="e.g. Standard Assembly Kit" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Target Model</label>
+                                            <input type="text" value={tplTarget} onChange={(e) => setTplTarget(e.target.value)} placeholder="e.g. MF55 or ALL" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div className="border border-slate-200 rounded-lg p-4">
+                                        <h4 className="font-bold text-slate-700 mb-3">Items in Template</h4>
+                                        <div className="space-y-2 mb-4">
+                                            {tplItems.map(item => {
+                                                const part = parts.find(p => p.id === item.partId);
+                                                return part ? (
+                                                    <div key={item.partId} className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg">
+                                                        <div className="flex-1">
+                                                            <div className="font-bold text-sm text-slate-800">{part.name}</div>
+                                                            <div className="text-xs text-slate-500">{part.code}</div>
+                                                        </div>
+                                                        <input type="number" min="1" value={item.quantity} onChange={(e) => updateItemQty(item.partId, parseInt(e.target.value) || 1)}
+                                                            className="w-20 px-3 py-1.5 border border-slate-200 rounded text-center text-sm" />
+                                                        <button onClick={() => removeItemFromTemplate(item.partId)} className="text-red-500 hover:text-red-700">
+                                                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </button>
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                            {tplItems.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No items added yet</p>}
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Add Parts</label>
+                                            <input type="text" value={tplSearchTerm} onChange={(e) => setTplSearchTerm(e.target.value)} placeholder="Search parts to add..."
+                                                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-2" />
+                                            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
+                                                {templateCatalogParts.map(p => (
+                                                    <div key={p.id} onClick={() => addItemToTemplate(p.id)}
+                                                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0 flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-bold text-sm text-slate-700">{p.name}</div>
+                                                            <div className="text-xs text-slate-400">{p.code}</div>
+                                                        </div>
+                                                        <span className="text-xs font-bold text-green-600">+ Add</span>
+                                                    </div>
+                                                ))}
+                                                {templateCatalogParts.length === 0 && <div className="px-4 py-3 text-sm text-slate-400">No parts found</div>}
                                             </div>
-                                        `;
-            }).join('')}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 pt-4 border-t border-slate-100">
+                                        {editingTemplateId && (
+                                            <button onClick={() => setIsDeleteConfirmOpen(true)} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-bold hover:bg-red-100 border border-red-200">Delete</button>
+                                        )}
+                                        <div className="flex-1 flex gap-4">
+                                            <button onClick={() => setIsTemplateModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 rounded-lg text-slate-500 font-bold hover:bg-slate-50">Cancel</button>
+                                            <button onClick={saveTemplate} disabled={!tplName || tplItems.length === 0}
+                                                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg disabled:opacity-50">Save Template</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    )}
 
-                        <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center shrink-0 z-10">
-                            ${isEdit ? `
-                                <button onclick="confirmDeleteTemplate()" class="w-10 h-10 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 border border-red-100 transition-colors mr-auto" title="Delete Template">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            ` : '<div class="mr-auto"></div>'}
-                            <div class="flex gap-3">
-                                <button onclick="closeTemplateModal()" class="px-6 py-2 border border-slate-200 rounded-lg font-bold text-slate-500 hover:bg-white text-sm">Cancel</button>
-                                <button onclick="handleTemplateSave()" class="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm shadow-lg">Save Template</button>
+                    {/* Submit Confirmation Modal */}
+                    {submitTargetTemplate && (
+                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+                            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                                <h3 className="text-lg font-bold text-slate-800 mb-4">Confirm Production Job</h3>
+                                <p className="text-sm text-slate-600 mb-4">Submit template "<strong>{submitTargetTemplate.name}</strong>" to production?</p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setSubmitTargetTemplate(null)} className="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                    <button onClick={confirmSubmit} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700">Confirm</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Error Modal */}
+                    {submitErrors.length > 0 && (
+                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+                            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                                <div className="flex items-center gap-3 text-red-600 mb-4">
+                                    <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    <h3 className="text-lg font-bold">Insufficient Stock</h3>
+                                </div>
+                                <div className="mb-4 space-y-2">
+                                    {submitErrors.map((err, idx) => (
+                                        <p key={idx} className="text-sm text-slate-600 bg-red-50 px-3 py-2 rounded">{err}</p>
+                                    ))}
+                                </div>
+                                <button onClick={() => setSubmitErrors([])} className="w-full bg-slate-900 text-white px-4 py-2 rounded-lg font-bold hover:bg-slate-800">Close</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ORDER TRACKER (FULL - Production Monitor)
+        // ============================================================
+        function OrderTracker({ orders, onUpdateStatus }) {
+            const [filterStatus, setFilterStatus] = useState('ALL');
+            const [cancelTarget, setCancelTarget] = useState(null);
+            const [scanModalOpen, setScanModalOpen] = useState(false);
+            const [scanTargetOrder, setScanTargetOrder] = useState(null);
+            const [isScanning, setIsScanning] = useState(false);
+            const [scannedIndex, setScannedIndex] = useState(-1);
+            const [completedScanCount, setCompletedScanCount] = useState(0);
+
+            const stages = [
+                { id: OrderStatus.PART_CONTROL, label: 'Control (Slip)' },
+                { id: OrderStatus.PART_SUPPLY, label: 'Supply (Scan)' },
+                { id: OrderStatus.PROD_ASSY, label: 'Assy (Receive)' },
+                { id: OrderStatus.AGING, label: 'Aging' },
+                { id: OrderStatus.FINAL, label: 'Final' },
+                { id: OrderStatus.COMPLETED, label: 'Completed' }
+            ];
+
+            const filterOptions = [
+                { id: OrderStatus.PART_CONTROL, label: 'Control' },
+                { id: OrderStatus.PART_SUPPLY, label: 'Supply' },
+                { id: OrderStatus.PROD_ASSY, label: 'Assy' },
+                { id: OrderStatus.AGING, label: 'Aging' },
+                { id: OrderStatus.FINAL, label: 'Final' },
+                { id: OrderStatus.COMPLETED, label: 'Completed' },
+                { id: OrderStatus.CANCELLED, label: 'Cancelled' }
+            ];
+
+            const filteredOrders = filterStatus === 'ALL' ? orders : orders.filter(o => o.status === filterStatus);
+
+            const initiateCancel = (order) => setCancelTarget(order);
+
+            const confirmCancel = async () => {
+                if (cancelTarget) {
+                    await onUpdateStatus(cancelTarget.id, OrderStatus.CANCELLED);
+                    setCancelTarget(null);
+                }
+            };
+
+            const handleStageClick = async (order, targetStageId) => {
+                if (order.status === OrderStatus.PART_SUPPLY && targetStageId === OrderStatus.PROD_ASSY) {
+                    setScanTargetOrder(order);
+                    setScanModalOpen(true);
+                    setIsScanning(false);
+                    setScannedIndex(-1);
+                    setCompletedScanCount(0);
+                } else {
+                    await onUpdateStatus(order.id, targetStageId);
+                }
+            };
+
+            const performSequentialScan = async () => {
+                if (!scanTargetOrder) return;
+                setIsScanning(true);
+                setScannedIndex(-1);
+                setCompletedScanCount(0);
+                const items = scanTargetOrder.items;
+                for (let i = 0; i < items.length; i++) {
+                    setScannedIndex(i);
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    setCompletedScanCount(prev => prev + 1);
+                }
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await onUpdateStatus(scanTargetOrder.id, OrderStatus.PROD_ASSY);
+                setScanModalOpen(false);
+                setScanTargetOrder(null);
+                setIsScanning(false);
+            };
+
+            return (
+                <div className="space-y-6 relative">
+                    {/* Cancel Confirmation Modal */}
+                    {cancelTarget && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+                                <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Cancel Production Order?</h3>
+                                <p className="text-sm text-slate-500 mb-6">
+                                    Order <strong>{cancelTarget.orderNo}</strong> will be stopped. If needed, re-issue a new Kanban.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setCancelTarget(null)} className="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 text-sm">Go Back</button>
+                                    <button onClick={confirmCancel} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200 text-sm">Yes, Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Barcode Scan Modal */}
+                    {scanModalOpen && scanTargetOrder && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative overflow-hidden flex flex-col max-h-[90vh]">
+                                <div className="text-center shrink-0">
+                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 border-2 transition-all ${isScanning ? 'bg-blue-50 border-blue-500 animate-pulse' : 'bg-slate-100 border-slate-200'}`}>
+                                        <svg className={`h-8 w-8 ${isScanning ? 'text-blue-600' : 'text-slate-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-1">Scanning Verification</h3>
+                                    <p className="text-xs text-slate-500 mb-4">
+                                        Slip ID: <span className="font-mono font-bold text-slate-800">{scanTargetOrder.supplySlipId || 'N/A'}</span>
+                                    </p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 flex-1 overflow-y-auto">
+                                    <div className="space-y-2">
+                                        {scanTargetOrder.items.map((item, idx) => {
+                                            const isCurrent = idx === scannedIndex;
+                                            const isCompleted = idx < completedScanCount;
+                                            return (
+                                                <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-300 ${isCompleted ? 'bg-green-50 border-green-200' :
+                                                        isCurrent ? 'bg-blue-50 border-blue-400 scale-[1.02] shadow-sm' :
+                                                            'bg-white border-slate-100 opacity-60'
+                                                    }`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors ${isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                                                                isCurrent ? 'bg-white border-blue-500 text-blue-500 animate-spin' :
+                                                                    'bg-slate-100 border-slate-200 text-slate-400'
+                                                            }`}>
+                                                            {isCompleted ? '✓' : isCurrent ? '↻' : idx + 1}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className={`text-sm font-bold ${isCompleted ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-slate-600'}`}>
+                                                                {item.part?.name || 'Unknown Part'}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-400 font-mono">{item.part?.code}</span>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded ${isCompleted ? 'bg-green-200 text-green-800' : 'bg-slate-100 text-slate-500'}`}>
+                                                        Qty: {item.quantity}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="shrink-0">
+                                    <button onClick={performSequentialScan} disabled={isScanning}
+                                        className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${isScanning ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
+                                            }`}>
+                                        {isScanning ? (
+                                            <>
+                                                <span>Scanning...</span>
+                                                <span className="font-mono ml-2">({completedScanCount}/{scanTargetOrder.items.length})</span>
+                                            </>
+                                        ) : 'Start Barcode Sequence'}
+                                    </button>
+                                    {!isScanning && (
+                                        <button onClick={() => setScanModalOpen(false)} className="mt-3 w-full text-slate-400 text-sm font-bold hover:text-slate-600">Cancel</button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Main Content */}
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-800">Follow Prod. Master Schedule Plan</h3>
+                            <p className="text-sm text-slate-500">Real-time status of line target installation</p>
+                        </div>
+                        <div className="flex items-center">
+                            <div className="relative">
+                                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                                    className="appearance-none bg-white border border-slate-300 hover:border-blue-400 text-slate-700 py-2.5 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold cursor-pointer w-48 transition-all">
+                                    <option value="ALL">All Statuses</option>
+                                    {filterOptions.map(opt => (
+                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        }
 
-        function renderTemplateSubmitConfirmModal() {
-            const tpl = state.modals.templateSubmitTarget;
-            if (!tpl) return '';
-            return `
-                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center animate-in zoom-in">
-                        <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-2xl font-bold text-slate-800 mb-2">Confirm Job Order</h3>
-                        <p class="text-slate-500 mb-6">
-                            Create order for <strong>"${tpl.name}"</strong>? <br/>
-                            <span class="text-xs bg-slate-100 px-2 py-1 rounded mt-2 inline-block">Items will be deducted from inventory immediately.</span>
-                        </p>
-                        <div class="flex gap-4">
-                            <button onclick="closeTemplateSubmitConfirm()" class="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
-                            <button onclick="performTemplateSubmit()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Confirm Submit</button>
-                        </div>
+                    <div className="grid grid-cols-1 gap-6">
+                        {filteredOrders.length === 0 ? (
+                            <div className="text-center py-20 bg-white rounded-xl border border-dashed text-slate-400">
+                                No active orders found for {filterStatus === 'ALL' ? 'any status' : filterStatus}.
+                            </div>
+                        ) : (
+                            filteredOrders.map(order => {
+                                const isCancelled = order.status === OrderStatus.CANCELLED;
+                                const activeStatusId = isCancelled ? order.previousStatus : order.status;
+                                const isCombinedJob = order.items.length > 1;
+
+                                return (
+                                    <div key={order.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all ${isCancelled ? 'border-red-100 opacity-90' : 'border-slate-200'}`}>
+                                        <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`px-3 py-1 rounded text-xs font-bold ${isCancelled ? 'bg-slate-200 text-slate-500' : 'bg-blue-600 text-white'}`}>
+                                                    {order.targetModel || 'N/A'}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className={`font-bold ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{order.orderNo}</h4>
+                                                        {isCombinedJob && (
+                                                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[9px] uppercase font-bold rounded border border-slate-200" title="This order combines multiple parts into one supply slip">
+                                                                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2 5a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 002 2H4a2 2 0 01-2-2V5zm3 1h6v4H5V6zm6 6H5v2h6v-2z" clipRule="evenodd" /><path d="M15 7h1a2 2 0 012 2v5.5a1.5 1.5 0 01-3 0V7z" /></svg>
+                                                                Combined Job
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{order.requestedBy}</p>
+                                                        {order.supplySlipId && (
+                                                            <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded font-mono font-bold">
+                                                                Slip: {order.supplySlipId}
+                                                            </span>
+                                                        )}
+                                                        {order.status === OrderStatus.PROD_ASSY && !isCancelled && (
+                                                            <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-100 px-1.5 rounded font-bold animate-pulse">Auto-Refill Triggered</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-1 max-w-2xl px-8 hidden md:block">
+                                                <div className="relative flex justify-between">
+                                                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2 -z-0"></div>
+                                                    {stages.map((stage, idx) => {
+                                                        const isActive = activeStatusId === stage.id;
+                                                        const currentStageIdx = stages.findIndex(s => s.id === activeStatusId);
+                                                        const isPast = currentStageIdx > idx;
+
+                                                        let bubbleClass = 'bg-white border-2 border-slate-200 text-slate-400';
+                                                        let textClass = 'text-slate-400';
+
+                                                        if (isActive) {
+                                                            if (isCancelled) {
+                                                                bubbleClass = 'bg-red-500 text-white ring-4 ring-red-100 scale-125';
+                                                                textClass = 'text-red-500';
+                                                            } else {
+                                                                bubbleClass = 'bg-blue-600 text-white ring-4 ring-blue-100 scale-125';
+                                                                textClass = 'text-blue-600';
+                                                            }
+                                                        } else if (isPast) {
+                                                            bubbleClass = 'bg-green-500 text-white';
+                                                            textClass = 'text-green-600';
+                                                        }
+
+                                                        const isClickable = !isCancelled && order.status !== OrderStatus.COMPLETED;
+
+                                                        return (
+                                                            <button key={stage.id} onClick={() => isClickable && handleStageClick(order, stage.id)}
+                                                                disabled={!isClickable}
+                                                                className="relative z-10 flex flex-col items-center group focus:outline-none disabled:cursor-not-allowed cursor-pointer"
+                                                                title={isCancelled ? `Cancelled at ${stage.label}` : `Update status to ${stage.label}`}>
+                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${bubbleClass}`}>
+                                                                    {isPast ? '✓' : idx + 1}
+                                                                </div>
+                                                                <span className={`text-[10px] mt-2 font-bold uppercase tracking-tighter transition-colors ${textClass}`}>
+                                                                    {stage.label}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+                                                {isCancelled ? (
+                                                    <div className="text-right">
+                                                        <div className="px-3 py-1 bg-red-100 text-red-700 rounded border border-red-200 text-xs font-bold inline-block">
+                                                            CANCELLED
+                                                        </div>
+                                                        {order.previousStatus && (
+                                                            <p className="text-[9px] text-red-400 font-bold mt-1 text-right">
+                                                                Held @ {stages.find(s => s.id === order.previousStatus)?.label.split(' ')[0]}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    order.status !== OrderStatus.COMPLETED && (
+                                                        <button onClick={() => initiateCancel(order)}
+                                                            className="px-3 py-1.5 border border-red-200 text-red-500 hover:bg-red-50 rounded text-xs font-bold transition-colors flex items-center gap-1 active:scale-95">
+                                                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                            Cancel / Hold
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className={`p-5 ${isCancelled ? 'bg-red-50/20' : 'bg-slate-50/30'}`}>
+                                            {isCombinedJob && (
+                                                <div className="mb-2 flex items-center gap-2">
+                                                    <span className="text-[10px] uppercase font-bold text-slate-400">Batch Contents</span>
+                                                    <div className="h-px bg-slate-200 flex-1"></div>
+                                                </div>
+                                            )}
+                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                                {order.items.map((item, idx) => (
+                                                    <div key={idx} className={`flex justify-between items-center bg-white p-3 rounded-lg border shadow-sm ${isCancelled ? 'border-red-50' : 'border-slate-100'}`}>
+                                                        <div className="flex flex-col overflow-hidden mr-2">
+                                                            <span className={`text-xs font-bold truncate ${isCancelled ? 'text-slate-500' : 'text-slate-700'}`} title={item.part?.name}>{item.part?.name || 'Unknown Part'}</span>
+                                                            <span className="text-[10px] text-slate-400">{item.part?.code}</span>
+                                                        </div>
+                                                        <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-1 rounded text-slate-600 whitespace-nowrap">x {item.quantity}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
-            `;
+            );
         }
 
-        function renderTemplateStockErrorModal() {
-            return `
-                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in">
-                        <div class="flex items-center gap-3 mb-4 text-red-600 border-b border-red-50 pb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            <h3 class="text-xl font-bold">Insufficient Stock</h3>
-                        </div>
-                        <p class="text-sm text-slate-500 mb-4">Cannot create order. The following items have insufficient stock:</p>
-                        <ul class="bg-red-50 rounded-lg p-4 space-y-2 mb-6 max-h-60 overflow-y-auto">
-                            ${state.modals.templateStockErrors.map(err => `
-                                <li class="text-xs font-bold text-red-700 flex items-start gap-2">
-                                    <span>•</span> ${err.partName} (Need: ${err.required}, Stock: ${err.available})
-                                </li>
-                            `).join('')}
-                        </ul>
-                        <button onclick="closeTemplateStockError()" class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800">Close</button>
-                    </div>
-                </div>
-            `;
-        }
+        // ============================================================
+        // MAIN APP
+        // ============================================================
+        function App() {
+            const [activeView, setActiveView] = useState('inventory');
+            const [parts, setParts] = useState([]);
+            const [orders, setOrders] = useState([]);
+            const [loading, setLoading] = useState(true);
 
-        function renderOrderCancelConfirmModal() {
-            const order = state.modals.orderCancelTarget;
-            if (!order) return '';
-            return `
-                <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-in zoom-in">
-                        <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-xl font-bold text-slate-800 mb-2">Cancel Production Order?</h3>
-                        <p class="text-sm text-slate-500 mb-6">Order <strong>${order.orderNo}</strong> will be stopped at the current stage.</p>
-                        <div class="flex gap-3">
-                            <button onclick="closeCancelOrderModal()" class="flex-1 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 text-sm">Go Back</button>
-                            <button onclick="performCancelOrder()" class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200 text-sm">Yes, Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // === EVENT HANDLERS ===
-        function toggleSidebar() {
-            state.sidebarCollapsed = !state.sidebarCollapsed;
-            render();
-        }
-
-        function switchView(view) {
-            state.view = view;
-            render();
-        }
-
-        // Part Modal
-        function openPartModal() {
-            state.modals.partForm = true;
-            state.modals.partFormEditing = null;
-            state.partFormData = { code: '', name: '', category: '', currentQty: 0, maxStock: 0, alertThreshold: 20, unit: 'pcs', location: '', modelTarget: '', groupType: 'Prep Support' };
-            render();
-        }
-
-        function editPart(id) {
-            state.modals.partForm = true;
-            state.modals.partFormEditing = id;
-            render();
-        }
-
-        function closePartModal() {
-            state.modals.partForm = false;
-            state.modals.partFormEditing = null;
-            state.modals.partDeleteConfirm = false;
-            render();
-        }
-
-        function handlePartFormSubmit(e) {
-            e.preventDefault();
-            const data = {
-                code: document.getElementById('partCode').value,
-                name: document.getElementById('partName').value,
-                category: document.getElementById('partCategory').value,
-                currentQty: parseInt(document.getElementById('partCurrentQty').value),
-                maxStock: parseInt(document.getElementById('partMaxStock').value),
-                alertThreshold: parseInt(document.getElementById('partAlertThreshold').value),
-                unit: document.getElementById('partUnit').value,
-                location: document.getElementById('partLocation').value,
-                modelTarget: document.getElementById('partModelTarget').value,
-                groupType: document.getElementById('partGroupType').value
-            };
-            if (state.modals.partFormEditing) {
-                updatePart(state.modals.partFormEditing, data);
-            } else {
-                addPart(data);
-            }
-            closePartModal();
-            render();
-        }
-
-        function confirmDeletePart() {
-            state.modals.partDeleteConfirm = true;
-            render();
-        }
-
-        function cancelDeletePart() {
-            state.modals.partDeleteConfirm = false;
-            render();
-        }
-
-        function performDeletePart() {
-            if (state.modals.partFormEditing) {
-                deletePart(state.modals.partFormEditing);
-            }
-            closePartModal();
-            render();
-        }
-
-        // Quick Withdrawal
-        function handleQuickWithdrawal(e) {
-            e.preventDefault();
-            const partId = document.getElementById('quickPart').value;
-            const qty = parseInt(document.getElementById('quickQty').value);
-            const part = state.parts.find(p => p.id === partId);
-            if (!part) return;
-            if (part.currentQty < qty) {
-                alert(`Insufficient stock! Only ${part.currentQty} ${part.unit} available.`);
-                return;
-            }
-            const threshold = part.maxStock * part.alertThreshold / 100;
-            if ((part.currentQty - qty) < threshold) {
-                state.modals.stockWarning = true;
-                state.modals.stockWarningData = { part, qty };
-                render();
-            } else {
-                withdrawPart(partId, qty);
-                e.target.reset();
-                render();
-            }
-        }
-
-        function closeStockWarning() {
-            state.modals.stockWarning = false;
-            state.modals.stockWarningData = null;
-            render();
-        }
-
-        function proceedWithWarning() {
-            const { part, qty } = state.modals.stockWarningData;
-            withdrawPart(part.id, qty);
-            closeStockWarning();
-            document.getElementById('quickPart').value = '';
-            document.getElementById('quickQty').value = '1';
-            render();
-        }
-
-        // Template Modal
-        function openTemplateModal() {
-            state.modals.templateForm = true;
-            state.modals.templateFormEditing = null;
-            state.templateFormData = { name: '', targetModel: '', items: [], searchTerm: '' };
-            render();
-        }
-
-        function editTemplate(id) {
-            const tpl = state.templates.find(t => t.id === id);
-            if (tpl) {
-                state.modals.templateForm = true;
-                state.modals.templateFormEditing = id;
-                state.templateFormData = { name: tpl.name, targetModel: tpl.targetModel, items: [...tpl.items], searchTerm: '' };
-                render();
-            }
-        }
-
-        function closeTemplateModal() {
-            state.modals.templateForm = false;
-            state.modals.templateFormEditing = null;
-            state.modals.templateDeleteConfirm = false;
-            render();
-        }
-
-        function updateTemplateSearch(value) {
-            state.templateFormData.searchTerm = value;
-            render();
-        }
-
-        function addPartToTemplate(partId) {
-            if (!state.templateFormData.items.find(i => i.partId === partId)) {
-                state.templateFormData.items.push({ partId, quantity: 1 });
-                render();
-            }
-        }
-
-        function removePartFromTemplate(idx) {
-            state.templateFormData.items.splice(idx, 1);
-            render();
-        }
-
-        function updateTemplateItemQty(idx, value) {
-            const qty = parseInt(value) || 1;
-            state.templateFormData.items[idx].quantity = Math.max(1, qty);
-        }
-
-        function handleTemplateSave() {
-            const name = document.getElementById('tplName').value.trim();
-            const targetModel = document.getElementById('tplModel').value.trim();
-            if (!name) {
-                alert('Please enter a template name');
-                return;
-            }
-            if (state.templateFormData.items.length === 0) {
-                alert('Please add at least one part');
-                return;
-            }
-            saveTemplate({ name, targetModel, items: state.templateFormData.items });
-            closeTemplateModal();
-            render();
-        }
-
-        function confirmDeleteTemplate() {
-            state.modals.templateDeleteConfirm = true;
-            render();
-        }
-
-        function cancelDeleteTemplate() {
-            state.modals.templateDeleteConfirm = false;
-            render();
-        }
-
-        function performDeleteTemplate() {
-            if (state.modals.templateFormEditing) {
-                deleteTemplate(state.modals.templateFormEditing);
-            }
-            closeTemplateModal();
-            render();
-        }
-
-        // Template Submit
-        function submitTemplate(id) {
-            const tpl = state.templates.find(t => t.id === id);
-            if (!tpl) return;
-            const errors = [];
-            tpl.items.forEach(item => {
-                const part = state.parts.find(p => p.id === item.partId);
-                if (!part || part.currentQty < item.quantity) {
-                    errors.push({
-                        partName: part?.name || 'Unknown',
-                        partCode: part?.code || 'Unknown',
-                        required: item.quantity,
-                        available: part?.currentQty || 0,
-                        unit: part?.unit || 'pcs'
-                    });
+            const loadData = useCallback(async () => {
+                try {
+                    const [partsData, ordersData] = await Promise.all([api.getParts(), api.getOrders()]);
+                    setParts(partsData);
+                    setOrders(ordersData);
+                } catch (err) {
+                    console.error("Failed to load data", err);
+                } finally {
+                    setLoading(false);
                 }
-            });
-            if (errors.length > 0) {
-                state.modals.templateStockErrors = errors;
-                render();
-            } else {
-                state.modals.templateSubmitConfirm = true;
-                state.modals.templateSubmitTarget = tpl;
-                render();
+            }, []);
+
+            useEffect(() => {
+                loadData();
+                const interval = setInterval(loadData, 10000);
+                return () => clearInterval(interval);
+            }, [loadData]);
+
+            const handleWithdraw = useCallback(async (partId, qty) => {
+                await api.withdrawPart(partId, qty);
+                await loadData();
+            }, [loadData]);
+
+            const handleCreateOrder = useCallback(async (name, items, targetModel) => {
+                await api.createOrder(name, items, targetModel);
+                await loadData();
+            }, [loadData]);
+
+            const handleUpdateOrderStatus = useCallback(async (orderId, status) => {
+                await api.updateOrderStatus(orderId, status);
+                await loadData();
+            }, [loadData]);
+
+            const handleAddPart = useCallback(async (newPart) => {
+                await api.addPart(newPart);
+                await loadData();
+            }, [loadData]);
+
+            const handleUpdatePart = useCallback(async (id, updatedFields) => {
+                await api.updatePart(id, updatedFields);
+                await loadData();
+            }, [loadData]);
+
+            const handleDeletePart = useCallback(async (id) => {
+                await api.deletePart(id);
+                await loadData();
+            }, [loadData]);
+
+            if (loading) {
+                return (
+                    <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-blue-400 font-medium animate-pulse">Initializing E-Kanban Session...</p>
+                        </div>
+                    </div>
+                );
             }
+
+            return (
+                <Layout activeView={activeView} onViewChange={setActiveView}>
+                    {activeView === 'inventory' && <InventoryView parts={parts} onAddPart={handleAddPart} onUpdatePart={handleUpdatePart} onDeletePart={handleDeletePart} />}
+                    {activeView === 'single-withdrawal' && <WithdrawalView type="single" parts={parts} onWithdraw={handleWithdraw} onCreateOrder={handleCreateOrder} />}
+                    {activeView === 'list-withdrawal' && <WithdrawalView type="list" parts={parts} onWithdraw={handleWithdraw} onCreateOrder={handleCreateOrder} />}
+                    {activeView === 'orders' && <OrderTracker orders={orders} onUpdateStatus={handleUpdateOrderStatus} />}
+                </Layout>
+            );
         }
 
-        function closeTemplateSubmitConfirm() {
-            state.modals.templateSubmitConfirm = false;
-            state.modals.templateSubmitTarget = null;
-            render();
-        }
-
-        function performTemplateSubmit() {
-            const tpl = state.modals.templateSubmitTarget;
-            if (tpl) {
-                createOrder(tpl.name, tpl.items, tpl.targetModel);
-            }
-            closeTemplateSubmitConfirm();
-            state.view = 'orders';
-            render();
-        }
-
-        function closeTemplateStockError() {
-            state.modals.templateStockErrors = [];
-            render();
-        }
-
-        // Order Cancel
-        function openCancelOrderModal(orderId) {
-            const order = state.orders.find(o => o.id === orderId);
-            if (order) {
-                state.modals.orderCancelConfirm = true;
-                state.modals.orderCancelTarget = order;
-                render();
-            }
-        }
-
-        function closeCancelOrderModal() {
-            state.modals.orderCancelConfirm = false;
-            state.modals.orderCancelTarget = null;
-            render();
-        }
-
-        function performCancelOrder() {
-            if (state.modals.orderCancelTarget) {
-                updateOrderStatus(state.modals.orderCancelTarget.id, 'CANCELLED');
-            }
-            closeCancelOrderModal();
-            render();
-        }
-
-        // Initialize
-        init();
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 
