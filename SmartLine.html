@@ -9,6 +9,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="factory-layout.js"></script>
     <style>
         ::-webkit-scrollbar {
             width: 8px;
@@ -50,7 +51,7 @@
         const MODELS = ['K2JL', 'K3FG', 'K1M'];
 
         const generateInitialStations = () => {
-            return Array.from({ length: 30 }, (_, i) => ({
+            return Array.from({ length: 45 }, (_, i) => ({
                 id: `ST-${(i + 1).toString().padStart(2, '0')}`,
                 index: i + 1,
                 name: `OP-${(i + 1) * 10}`,
@@ -107,7 +108,7 @@
                 const stationData = {}, stationTimes = {};
                 let totalTime = 0, hasFault = false;
 
-                for (let j = 1; j <= 30; j++) {
+                for (let j = 1; j <= 45; j++) {
                     const sId = `ST-${j.toString().padStart(2, '0')}`;
                     const time = Math.floor(Math.random() * 4) + 2;
                     stationTimes[sId] = time;
@@ -183,11 +184,11 @@
                 <div className="h-full flex flex-col gap-4 p-6">
                     <div className="grid grid-cols-4 gap-4">
                         <div className="bg-white border p-4 rounded-xl shadow-sm">
-                            <div className="text-xs font-bold text-gray-400">Active Stations</div>
+                            <div className="text-xs font-bold text-gray-400">Current Status</div>
                             <div className="text-3xl font-bold">{runningCount} <span className="text-sm text-gray-400">/ 30</span></div>
                         </div>
                         <div className={`border p-4 rounded-xl ${ngCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
-                            <div className="text-xs font-bold text-gray-400">Line Alarms</div>
+                            <div className="text-xs font-bold text-gray-400">Line NG</div>
                             <div className={`text-3xl font-bold ${ngCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{ngCount}</div>
                         </div>
                         <div className="bg-white border p-4 rounded-xl shadow-sm">
@@ -208,199 +209,114 @@
             );
         };
 
-        // ============ LAYOUT MAP COMPONENT (FULL VERSION) ============
+        // ============ LAYOUT MAP COMPONENT (DYNAMIC SVG) ============
+        // ============ LAYOUT MAP COMPONENT (DYNAMIC SVG) ============
         const LayoutMap = ({ stations, onStationClick }) => {
-            const StationNode = ({ index, x, y, width = 25, height = 25 }) => {
-                const station = stations[index - 1];
-                if (!station) return null;
-                const getColor = (s) => {
-                    switch (s) {
-                        case StationStatus.RUNNING: return '#3b82f6';
-                        case StationStatus.OK: return '#22c55e';
-                        case StationStatus.NG: return '#ef4444';
-                        case StationStatus.PASS: return '#ef4444';
-                        case StationStatus.SKIP: return '#facc15';
-                        case StationStatus.IDLE: return '#FFFFE0';
-                        default: return '#e2e8f0';
+            const [svgContent, setSvgContent] = useState(null);
+            const containerRef = React.useRef(null);
+
+            // Load SVG from global variable (loaded via script tag)
+            useEffect(() => {
+                if (typeof FACTORY_LAYOUT_SVG !== 'undefined') {
+                    setSvgContent(FACTORY_LAYOUT_SVG);
+                } else {
+                    console.error("FACTORY_LAYOUT_SVG is not defined. Ensure factory-layout.js is loaded.");
+                }
+            }, []);
+
+            // Update SVG colors and interactivity when stations data changes
+            useEffect(() => {
+                if (!stations || !svgContent || !containerRef.current) return;
+
+                const stationTexts = containerRef.current.querySelectorAll('.station-text');
+                stationTexts.forEach(textNode => {
+                    const idText = textNode.textContent.trim();
+                    const stationIndex = parseInt(idText);
+
+                    if (!isNaN(stationIndex)) {
+                        const station = stations.find(s => s.index === stationIndex);
+                        const rectBox = textNode.previousElementSibling;
+
+                        // Verify structure: rect.station-box is exactly before text.station-text
+                        if (station && rectBox && rectBox.classList.contains('station-box')) {
+                            // Determine status color
+                            let color = '#e2e8f0';
+                            switch (station.status) {
+                                case StationStatus.RUNNING: color = '#3b82f6'; break; // Blue
+                                case StationStatus.OK: color = '#22c55e'; break;      // Green
+                                case StationStatus.NG: color = '#ef4444'; break;      // Red
+                                case StationStatus.PASS: color = '#ef4444'; break;    // Red
+                                case StationStatus.SKIP: color = '#facc15'; break;    // Yellow
+                                case StationStatus.IDLE: color = '#FFFFE0'; break;    // Pale Yellow
+                                default: color = '#e2e8f0';
+                            }
+                            rectBox.style.fill = color;
+
+                            // Apply Pulse Animation for Alarm (NG/PASS)
+                            // We use Tailwind's 'animate-pulse' if available, otherwise fallback
+                            if (station.status === StationStatus.NG || station.status === StationStatus.PASS) {
+                                rectBox.classList.add('animate-pulse');
+                                rectBox.style.strokeWidth = '3px';
+                            } else {
+                                rectBox.classList.remove('animate-pulse');
+                                rectBox.style.strokeWidth = '2px';
+                            }
+
+                            // Add pointer cursor to indicate clickability
+                            rectBox.style.cursor = 'pointer';
+                            textNode.style.cursor = 'pointer';
+                        }
                     }
-                };
-                const color = getColor(station.status);
-                const isAlarm = station.status === StationStatus.NG || station.status === StationStatus.PASS;
-                return <g onClick={() => onStationClick(station)} style={{ cursor: 'pointer' }}><rect x={x} y={y} width={width} height={height} fill={color} stroke="#555" strokeWidth={isAlarm ? 3 : 2} className={isAlarm ? 'animate-pulse' : ''} /><text x={x + width / 2} y={y + height / 2 + 1} fontFamily="Arial" fontSize={isAlarm ? "14px" : "12px"} fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill={station.status === StationStatus.IDLE ? '#333' : '#FFF'}>{index}</text></g>;
+                });
+            }, [stations, svgContent]);
+
+            // Handle Click via Event Delegation
+            const handleSvgClick = (e) => {
+                const target = e.target;
+                let stationIndex = null;
+
+                // 1. Click on Text
+                if (target.classList.contains('station-text')) {
+                    stationIndex = parseInt(target.textContent.trim());
+                }
+                // 2. Click on Rect Box (find next sibling text)
+                else if (target.classList.contains('station-box')) {
+                    const nextNode = target.nextElementSibling;
+                    if (nextNode && nextNode.classList.contains('station-text')) {
+                        stationIndex = parseInt(nextNode.textContent.trim());
+                    }
+                }
+
+                if (stationIndex !== null && !isNaN(stationIndex)) {
+                    const station = stations.find(s => s.index === stationIndex);
+                    if (station) onStationClick(station);
+                }
             };
 
             return (
+                // Removed outer padding to maximize width
                 <div className="h-full bg-white rounded-lg border overflow-hidden relative">
                     <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur px-4 py-2 rounded pointer-events-none">
                         <h2 className="text-xl font-bold text-white">Interactive Factory Layout</h2>
-                        <p className="text-xs text-gray-300">Live Monitor - 30 Stations</p>
+                        <p className="text-xs text-gray-300">Live Monitor - {stations.length} Stations</p>
                     </div>
-                    <div className="w-full h-full overflow-auto flex items-center justify-center bg-gray-100 p-4">
-                        <svg width="1800" height="600" viewBox="0 0 1800 600" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                                <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                                    <rect width="2" height="4" fill="#888" opacity="0.5" />
-                                </pattern>
-                            </defs>
 
-                            {/* OVERHEAD LINE SECTION */}
-                            <g transform="translate(50, 50)">
-                                <path d="M 350,225 L 480,225 L 480,375 L 100,375 L 100,125 L 250,125 L 250,200 L 250,225 L 350,225" fill="none" stroke="#999" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-
-                                {/* Stations 1-4 (Top horizontal) */}
-                                <g transform="translate(300, 212.5)">
-                                    <StationNode index={1} x={0} y={0} width={30} height={25} />
-                                    <StationNode index={2} x={40} y={0} width={30} height={25} />
-                                    <StationNode index={3} x={80} y={0} width={30} height={25} />
-                                    <StationNode index={4} x={120} y={0} width={30} height={25} />
-                                </g>
-
-                                {/* Stations 5-7 (Right vertical) */}
-                                <g transform="translate(465, 250)">
-                                    <StationNode index={5} x={0} y={0} width={25} height={30} />
-                                    <StationNode index={6} x={0} y={40} width={25} height={30} />
-                                    <StationNode index={7} x={0} y={80} width={25} height={30} />
-                                </g>
-
-                                {/* Stations 8-15 (Bottom horizontal) */}
-                                <g transform="translate(60, 362.5)">
-                                    <StationNode index={8} x={360} y={0} width={30} height={25} />
-                                    <StationNode index={9} x={320} y={0} width={30} height={25} />
-                                    <StationNode index={10} x={280} y={0} width={30} height={25} />
-                                    <StationNode index={11} x={240} y={0} width={30} height={25} />
-                                    <StationNode index={12} x={200} y={0} width={30} height={25} />
-                                    <StationNode index={13} x={160} y={0} width={30} height={25} />
-                                    <StationNode index={14} x={120} y={0} width={30} height={25} />
-                                    <StationNode index={15} x={80} y={0} width={30} height={25} />
-                                </g>
-
-                                {/* Decorative boxes - Left side */}
-                                <g transform="translate(87.5, 110)">
-                                    <rect x="0" y="240" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="255" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="0" y="200" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="215" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="0" y="160" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="175" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="0" y="120" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="135" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="0" y="80" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="95" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="0" y="40" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="55" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                </g>
-
-                                {/* Middle monitor section */}
-                                <g transform="translate(105, 110)">
-                                    <rect x="5" y="0" width="30" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="20" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <path d="M 40,-10 A 30,25 0 0,1 100,-10" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <path d="M 40,35 A 30,25 0 0,0 100,35" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <rect x="40" y="0" width="60" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" />
-                                    <text x="70" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">MD</text>
-                                    <text x="70" y="-55" fontFamily="Arial" fontSize="11" textAnchor="middle" fill="black">Middle</text>
-                                    <text x="70" y="-42" fontFamily="Arial" fontSize="11" textAnchor="middle" fill="black">monitor</text>
-                                    <rect x="105" y="0" width="30" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="120" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="132.5" y="35" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="145" y="50" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="132.5" y="75" width="25" height="30" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="145" y="90" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                </g>
-
-                                {/* Labels */}
-                                <rect x="250" y="260" width="100" height="30" fill="blue" rx="5" />
-                                <text x="300" y="275" fill="white" fontFamily="Arial" fontSize="16px" fontWeight="bold" textAnchor="middle" dominantBaseline="middle">OVER HEAD</text>
-                                <rect x="400" y="280" width="50" height="40" fill="#FFE4C4" />
-                                <text x="425" y="300" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text>
-                                <text x="425" y="315" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 1</text>
-                                <rect x="150" y="300" width="50" height="40" fill="#FFE4C4" />
-                                <text x="175" y="320" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text>
-                                <text x="175" y="335" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 2</text>
-                                <rect x="10" y="210" width="50" height="40" fill="#FFE4C4" />
-                                <text x="35" y="230" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text>
-                                <text x="35" y="245" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 3</text>
-                                <path d="M 240,80 L 255,50 L 270,80 Z" fill="skyblue" />
-                                <text x="270" y="70" fontFamily="Arial" fontSize="14px" fontWeight="bold">Monitor</text>
-                                <circle cx="280" cy="210" r="8" fill="#DDD" /><text x="280" y="210" fontFamily="Arial" fontSize="10px" textAnchor="middle" dominantBaseline="central">L</text>
-                                <circle cx="280" cy="240" r="8" fill="#DDD" /><text x="280" y="240" fontFamily="Arial" fontSize="10px" textAnchor="middle" dominantBaseline="central">R</text>
-                            </g>
-
-                            {/* MAIN LINE SECTION */}
-                            <g transform="translate(190, 120)">
-                                <line x1="180" y1="75" x2="1220" y2="75" stroke="#999" strokeWidth="36" strokeLinecap="round" />
-                                <rect x="210" y="20" width="110" height="30" fill="blue" rx="5" />
-                                <text x="265" y="35" fill="white" fontFamily="Arial" fontSize="16px" fontWeight="bold" textAnchor="middle" dominantBaseline="middle">MAIN LINE</text>
-                                <circle cx="160" cy="50" r="8" fill="#DDD" /><text x="160" y="50" fontFamily="Arial" fontSize="10px" textAnchor="middle" dominantBaseline="central">L</text>
-                                <circle cx="160" cy="100" r="8" fill="#DDD" /><text x="160" y="100" fontFamily="Arial" fontSize="10px" textAnchor="middle" dominantBaseline="central">R</text>
-                                <rect x="180" y="65" width="60" height="20" fill="url(#hatch)" />
-                                <rect x="180" y="95" width="80" height="20" fill="#DDD" stroke="black" />
-                                <text x="220" y="108" fontFamily="Arial" fontSize="10px" fontWeight="bold" textAnchor="middle" fill="#333">AUTO IMPACT</text>
-
-                                {/* Stations 16-30 */}
-                                <g transform="translate(250, 62.5)">
-                                    <StationNode index={16} x={0} y={0} width={25} height={25} />
-                                    <StationNode index={17} x={30} y={0} width={25} height={25} />
-                                    <StationNode index={18} x={60} y={0} width={25} height={25} />
-                                    <StationNode index={19} x={90} y={0} width={25} height={25} />
-                                    <StationNode index={20} x={120} y={0} width={25} height={25} />
-                                    <StationNode index={21} x={150} y={0} width={25} height={25} />
-                                    <StationNode index={22} x={180} y={0} width={25} height={25} />
-                                    <StationNode index={23} x={210} y={0} width={25} height={25} />
-                                    <StationNode index={24} x={240} y={0} width={25} height={25} />
-                                    <StationNode index={25} x={270} y={0} width={25} height={25} />
-                                    <StationNode index={26} x={300} y={0} width={25} height={25} />
-                                    <StationNode index={27} x={330} y={0} width={25} height={25} />
-                                    <StationNode index={28} x={360} y={0} width={25} height={25} />
-                                    <StationNode index={29} x={390} y={0} width={25} height={25} />
-                                    <StationNode index={30} x={420} y={0} width={25} height={25} />
-                                </g>
-
-                                {/* Middle monitor 1 */}
-                                <g transform="translate(710, 62.5)">
-                                    <path d="M 0,-10 A 30,30 0 0,1 60,-10" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <text x="30" y="-60" fontFamily="Arial" fontSize="12px" textAnchor="middle" fill="black">Middle</text>
-                                    <text x="30" y="-45" fontFamily="Arial" fontSize="12px" textAnchor="middle" fill="black">monitor</text>
-                                    <path d="M 0,35 A 30,30 0 0,0 60,35" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <rect x="0" y="0" width="60" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="30" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">MD</text>
-                                </g>
-
-                                {/* Static boxes after monitor 1 */}
-                                <g transform="translate(780, 62.5)">
-                                    <rect x="0" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="30" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="42.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">DS</text>
-                                    <rect x="60" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="72.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="90" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="102.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="120" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="132.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="150" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="162.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="180" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="192.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="210" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="222.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="240" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="252.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                </g>
-
-                                {/* Middle monitor 2 */}
-                                <g transform="translate(1060, 62.5)">
-                                    <path d="M 0,-10 A 30,30 0 0,1 60,-10" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <text x="30" y="-60" fontFamily="Arial" fontSize="12px" textAnchor="middle" fill="black">Middle</text>
-                                    <text x="30" y="-45" fontFamily="Arial" fontSize="12px" textAnchor="middle" fill="black">monitor</text>
-                                    <path d="M 0,35 A 30,30 0 0,0 60,35" fill="#FFFACD" stroke="#888" strokeWidth="1" />
-                                    <rect x="0" y="0" width="60" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="30" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">MD</text>
-                                </g>
-
-                                {/* End section */}
-                                <g transform="translate(1130, 62.5)">
-                                    <rect x="0" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="12.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="30" y="0" width="25" height="25" fill="#FFFFE0" stroke="#555" strokeWidth="2" /><text x="42.5" y="12.5" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" dominantBaseline="central" fill="#333">-</text>
-                                    <rect x="40" y="35" width="60" height="20" fill="url(#hatch)" />
-                                    <rect x="20" y="60" width="80" height="20" fill="#DDD" stroke="black" />
-                                    <text x="60" y="73" fontFamily="Arial" fontSize="10px" fontWeight="bold" textAnchor="middle" fill="#333">AUTO IMPACT</text>
-                                </g>
-
-                                {/* Sub boxes */}
-                                <g transform="translate(250, -10)">
-                                    <rect x="210" y="20" width="50" height="40" fill="#FFE4C4" /><text x="235" y="40" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text><text x="235" y="55" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 4</text>
-                                    <rect x="390" y="20" width="50" height="40" fill="#FFE4C4" /><text x="415" y="40" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text><text x="415" y="55" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 5</text>
-                                    <rect x="580" y="20" width="50" height="40" fill="#FFE4C4" /><text x="605" y="40" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text><text x="605" y="55" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 6</text>
-                                    <rect x="730" y="20" width="50" height="40" fill="#FFE4C4" /><text x="755" y="40" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">Sub</text><text x="755" y="55" fontFamily="Arial" fontSize="14px" fontWeight="bold" textAnchor="middle" fill="black">box 7</text>
-                                </g>
-
-                                {/* Control arrow */}
-                                <g transform="translate(1100, 180)">
-                                    <path d="M 0,20 L 15,-10 L 30,20 Z" fill="#EE82EE" />
-                                    <text x="40" y="10" fontFamily="Arial" fontSize="14px" fontWeight="bold">Main control</text>
-                                </g>
-                            </g>
-                        </svg>
+                    {/* Adjusted padding to be minimal (p-2) to allow full width usage */}
+                    <div className="w-full h-full overflow-auto flex items-center justify-center bg-gray-100 p-2">
+                        {svgContent ? (
+                            <div
+                                className="w-full h-full flex items-center justify-center"
+                                ref={containerRef}
+                                dangerouslySetInnerHTML={{ __html: svgContent }}
+                                onClick={handleSvgClick}
+                            />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-gray-400 font-mono">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                                <p className="text-lg">Loading Factory Layout...</p>
+                                <p className="text-xs mt-2 text-orange-400">Ensure 'factory-layout.js' is in the same directory.</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Legend */}
@@ -617,12 +533,26 @@
                                 <div><span className="text-6xl font-mono font-bold">{station.cycleTime.toFixed(1)}</span><span className="text-gray-500 ml-2">sec</span></div>
                             </div>
                             <div className="flex justify-between border-b border-gray-600 pb-4 mb-4">
-                                <span className="text-gray-400 text-xl">Total Output</span>
-                                <span className="text-6xl font-mono font-bold">{station.totalCount}</span>
+                                <span className="text-gray-400 text-xl">Total Status</span>
+                                <div><span className="text-6xl font-mono font-bold">{station.totalCount}</span><span className="text-gray-500 ml-2">Process</span></div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-400 text-xl">NG Count</span>
-                                <span className="text-6xl font-mono font-bold text-red-500">{station.ngCount}</span>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-gray-800 p-3 rounded">
+                                    <div className="text-gray-400 text-sm">OK Count</div>
+                                    <div className="text-3xl font-mono font-bold text-green-500">{station.totalCount - station.ngCount}</div>
+                                </div>
+                                <div className="bg-gray-800 p-3 rounded">
+                                    <div className="text-gray-400 text-sm">NG Count</div>
+                                    <div className="text-3xl font-mono font-bold text-red-500">{station.ngCount}</div>
+                                </div>
+                                <div className="bg-gray-800 p-3 rounded">
+                                    <div className="text-gray-400 text-sm">Skip Count</div>
+                                    <div className="text-3xl font-mono font-bold text-yellow-500">0</div>
+                                </div>
+                                <div className="bg-gray-800 p-3 rounded">
+                                    <div className="text-gray-400 text-sm">By Pass Count</div>
+                                    <div className="text-3xl font-mono font-bold text-blue-500">0</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -635,6 +565,7 @@
             const [stations, setStations] = useState(generateInitialStations());
             const [currentPage, setCurrentPage] = useState('dashboard');
             const [selectedStation, setSelectedStation] = useState(null);
+            const [isMenuCollapsed, setIsMenuCollapsed] = useState(false); // State for menu collapse
 
             useEffect(() => {
                 const interval = setInterval(() => {
@@ -659,20 +590,37 @@
 
             return (
                 <div className="flex h-screen">
-                    <aside className="w-64 bg-white border-r flex flex-col">
-                        <div className="h-16 flex items-center px-4 border-b">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/2552px-Honda_Logo.svg.png" alt="Honda" className="w-10 h-10 mr-2" />
-                            <span className="font-bold text-lg">SMART LINE</span>
+                    {/* Sidebar with dynamic width based on collapsed state */}
+                    <aside className={`bg-white border-r flex flex-col transition-all duration-300 ${isMenuCollapsed ? 'w-20' : 'w-64'}`}>
+                        {/* Logo and user interaction for toggling menu */}
+                        <div
+                            className="h-16 flex items-center px-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
+                            onClick={() => setIsMenuCollapsed(!isMenuCollapsed)}
+                            title="Click to toggle menu"
+                        >
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/2552px-Honda_Logo.svg.png" alt="Honda" className="w-10 h-10 mr-2 flex-shrink-0" />
+                            {!isMenuCollapsed && <span className="font-bold text-lg whitespace-nowrap overflow-hidden">Interlock Line 1</span>}
                         </div>
+
                         <nav className="flex-1 p-3">
-                            <button onClick={() => setCurrentPage('dashboard')} className={`w-full text-left p-3 rounded mb-2 ${currentPage === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>📺 TV Dashboard</button>
-                            <button onClick={() => setCurrentPage('layout')} className={`w-full text-left p-3 rounded mb-2 ${currentPage === 'layout' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>🗺️ Factory Layout</button>
-                            <button onClick={() => setCurrentPage('report')} className={`w-full text-left p-3 rounded mb-2 ${currentPage === 'report' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>📄 Production Report</button>
+                            <button onClick={() => setCurrentPage('dashboard')} className={`w-full text-left p-3 rounded mb-2 flex items-center gap-3 ${currentPage === 'dashboard' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`} title="Dashboard">
+                                <span className="text-xl">📺</span>
+                                {!isMenuCollapsed && <span>TV Dashboard</span>}
+                            </button>
+                            <button onClick={() => setCurrentPage('layout')} className={`w-full text-left p-3 rounded mb-2 flex items-center gap-3 ${currentPage === 'layout' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`} title="Factory Layout">
+                                <span className="text-xl">🗺️</span>
+                                {!isMenuCollapsed && <span>Factory Layout</span>}
+                            </button>
+                            <button onClick={() => setCurrentPage('report')} className={`w-full text-left p-3 rounded mb-2 flex items-center gap-3 ${currentPage === 'report' ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`} title="Production Report">
+                                <span className="text-xl">📄</span>
+                                {!isMenuCollapsed && <span>Production Report</span>}
+                            </button>
                         </nav>
+
                         <div className="p-4 border-t">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                <span className="text-xs text-gray-500">System Online</span>
+                            <div className="flex items-center gap-2 justify-center lg:justify-start">
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></div>
+                                {!isMenuCollapsed && <span className="text-xs text-gray-500 whitespace-nowrap">System Online</span>}
                             </div>
                         </div>
                     </aside>
@@ -688,7 +636,9 @@
                                 <div className="text-xs text-gray-500">{new Date().toLocaleDateString()}</div>
                             </div>
                         </header>
-                        <div className="flex-1 overflow-hidden">
+
+                        {/* Modified container for layout page to remove padding/margins if needed */}
+                        <div className={`flex-1 overflow-hidden ${currentPage === 'layout' ? 'p-0' : ''}`}>
                             {renderPage()}
                         </div>
                     </main>
